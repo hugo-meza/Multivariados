@@ -1,0 +1,238 @@
+---
+title: "Actividad 2.3"
+author: "Hugo André Meza Fierros"
+date: "2026-11-15"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+library(plot3D)
+library(car)       # vif(); si no lo tienes: install.packages("car")
+library(lmtest)    # bptest(), dwtest(); install.packages("lmtest")
+```
+
+# Actividad 2.3 Regresión lineal múltiple
+
+```{r}
+datos <- read.csv("data/datosRes-1.csv")
+str(datos)
+summary(datos)      
+sum(is.na(datos))   
+
+names(datos) <- c("Resistencia", "Longitud", "Altura.matriz",
+                  "Altura.poste", "Altura.amarre")
+Y  <- datos$Resistencia
+X1 <- datos$Longitud
+X2 <- datos$Altura.matriz
+X3 <- datos$Altura.poste
+X4 <- datos$Altura.amarre
+n  <- nrow(datos)
+```
+
+Se tienen 25 observaciones y 5 variables, sin valores faltantes.
+
+## 1. Análisis exploratorio
+
+Analiza los datos que se te proporcionan
+
+### 1.1 Obtén los gráficos de dispersión entre variables.
+
+```{r}
+pairs(datos, pch = 19, col = "steelblue", main = "Dispersión entre variables")
+```
+
+La relación entre `Resistencia` y `Longitud` es casi una línea recta creciente. Con `Altura.matriz` la nube es más dispersa y no muestra un patrón tan claro. `Altura.poste` y `Altura.amarre` toman pocos valores enteros (1 a 4), por lo que los puntos se alinean en columnas; aun así se aprecia una tendencia creciente con la resistencia. Se observa un punto extremo en la esquina superior derecha (valores máximos de longitud y resistencia).
+
+### 1.2 Matriz de correlación.
+
+```{r}
+R <- round(cor(datos), 3)
+R
+```
+
+**Interpretación:** todas las correlaciones son positivas, es decir, todas las variables se mueven en la misma dirección.
+
+- Con la respuesta, la variable más correlacionada es `Longitud` ($r = 0.982$, relación lineal casi perfecta), seguida de `Altura.poste` ($0.836$) y `Altura.amarre` ($0.748$). `Altura.matriz` tiene una correlación moderada ($0.493$).
+- Entre las predictoras, las correlaciones más altas son `Longitud`-`Altura.poste` ($0.795$) y `Altura.poste`-`Altura.amarre` ($0.779$). Son altas pero no llegan a $0.8$, por lo que sugieren una posible colinealidad moderada, que se evalúa con el VIF más adelante.
+
+### 1.3 Boxplots e histogramas
+
+```{r}
+par(mfrow = c(2, 3))
+for (v in names(datos)) boxplot(datos[[v]], main = v, col = "lightblue")
+par(mfrow = c(2, 3))
+for (v in names(datos)) hist(datos[[v]], main = v, xlab = v, col = "lightblue")
+par(mfrow = c(1, 1))
+```
+
+- `Resistencia` es asimétrica a la derecha, con un valor atípico alto (cerca de 69).
+- `Longitud` también presenta asimetría a la derecha, sin atípicos.
+- `Altura.matriz` se distribuye de forma amplia y sin atípicos, con valores entre 50 y 600.
+- `Altura.poste` y `Altura.amarre` son discretas (1 a 4) y se concentran en los valores bajos; en ambas el valor 4 aparece como atípico. En `Altura.amarre` la gran mayoría de las observaciones tiene el valor 1.
+
+Se trabajan aquí como numéricas, pero conviene tener presente que son variables discretas u ordinales.
+
+## 2. Métodos de mínimos cuadrados
+
+El estimador de mínimos cuadrados es$$\hat\beta = (X'X)^{-1}X'y$$
+
+```{r}
+X <- cbind(1, X1, X2, X3, X4)          # matriz de diseño n x (k+1)
+colnames(X)[1] <- "Intercepto"
+beta_hat <- solve(t(X) %*% X) %*% t(X) %*% Y
+round(beta_hat, 5)
+```
+
+Ecuación estimada (modelo completo):
+
+$$\hat Y = \hat\beta_0 + \hat\beta_1 \,\text{Longitud} + \hat\beta_2 \,\text{Altura.matriz} + \hat\beta_3 \,\text{Altura.poste} + \hat\beta_4 \,\text{Altura.amarre}$$$$
+\hat{Y} = 1.068 + 2.484 \times\text{Longitud} + 0.009 \times \text{Altura.matriz} + 0.622 \times \text{Altura.poste} + 2.294 \times \text{Altura.amarre}
+$$
+
+## 3. Regresión lineal múltiple
+
+Obtenga el modelo de regresión múltiple mediante la función de regresión en R y compare sus resultados
+
+```{r}
+A <- lm(Y ~ X1 + X2 + X3 + X4)
+summary(A)
+
+# Comparación con el cálculo matricial
+cbind(Matricial = as.numeric(beta_hat), lm = coef(A),
+      Diferencia = as.numeric(beta_hat) - coef(A))
+```
+
+La diferencia entre el cálculo matricial y `lm()` es del orden de $10^{-14}$ o menor, es decir, nula salvo por error de redondeo: ambos métodos dan exactamente el mismo modelo.
+
+En el modelo completo, $R^2 = 0.9899$ ($R^2$ ajustado $= 0.9879$) y la prueba F es muy significativa ($F = 490.6$, valor p $< 2.2\times 10^{-16}$). Por coeficiente, `Longitud` ($p < 0.001$), `Altura.matriz` ($p = 0.0017$) y `Altura.amarre` ($p = 0.0061$) son significativas, mientras que `Altura.poste` ($p = 0.452$) y el intercepto ($p = 0.263$) no lo son.
+
+### Gráfico con 2 variables
+
+```{r}
+A2 <- lm(Y ~ X1 + X2)
+
+scatter3D(X1, X2, Y, col = "blue", cex = 0.9, pch = 19,
+          xlab = "Longitud", ylab = "Altura matriz", zlab = "Resistencia",
+          phi = 0, theta = 20, main = "Resistencia ~ Longitud + Altura.matriz")
+
+```
+
+Los puntos siguen una trayectoria casi lineal ascendente: la resistencia crece con la longitud, y la altura de la matriz aporta una pendiente adicional más pequeña.
+
+## 4. Evaluación del modelo
+
+### 4.1 Colinealidad de las variables involucradas
+
+```{r}
+vif(A)
+```
+
+Ningún VIF excede 5 (el mayor es $3.98$, de `Altura.poste`), por lo que no hay problemas graves de colinealidad. Aun así, `Altura.poste` es la variable con mayor VIF, consistente con su correlación alta con `Longitud` y `Altura.amarre`.
+
+### 4.2 Selección del modelo, variabilidad explicada y economía
+
+```{r}
+B <- step(A, direction = "both", trace = 1)
+formula(B)
+
+# Comparación de modelos candidatos
+c(R2_completo = summary(A)$r.squared,   R2aj_completo = summary(A)$adj.r.squared,
+  R2_B = summary(B)$r.squared,          R2aj_B = summary(B)$adj.r.squared)
+AIC(A, B); BIC(A, B)
+anova(B, A)   # H0: las variables eliminadas no aportan
+```
+
+El procedimiento `step()` elimina `Altura.poste` (el AIC baja de $32.54$ a $31.27$). La comparación entre el modelo completo y el reducido respalda esa decisión:
+
+| Criterio       | Completo (A) | Reducido (B) |
+|----------------|--------------|--------------|
+| $R^2$          | 0.9899       | 0.9896       |
+| $R^2$ ajustado | 0.9879       | **0.9881**   |
+| AIC            | 105.49       | **104.22**   |
+| BIC            | 112.80       | **110.31**   |
+
+- La prueba `anova(B, A)` da $F = 0.589$ y valor p $= 0.4518 > 0.05$, así que `Altura.poste` no aporta información adicional significativa.
+- El $R^2$ casi no cambia, el $R^2$ ajustado mejora y AIC y BIC bajan, por lo que **el modelo reducido es preferible por economía**: explica prácticamente lo mismo con una variable menos.
+
+### 4.3 Modelo de mejor ajuste
+
+```{r}
+summary(B)
+confint(B)
+vif(B)
+```
+
+$$\hat Y = 1.367 + 2.535 \times \text{Longitud} + 0.0085 \times \text{Altura.matriz} + 2.599 \times \text{Altura.amarre}$$
+
+- **Colinealidad:** los VIF del modelo final son $1.76$ (`Longitud`), $1.41$ (`Altura.matriz`) y $2.12$ (`Altura.amarre`). Todos son bajos, y la colinealidad prácticamente desaparece al quitar `Altura.poste`.
+- **Variabilidad explicada:** $R^2 = 0.9896$ y $R^2$ ajustado $= 0.9881$; el modelo explica aproximadamente el $98.9\%$ de la variabilidad de la resistencia.
+- **Significancia del modelo:** $F = 667$ con 3 y 21 grados de libertad, valor p $< 2.2\times 10^{-16}$. Se rechaza $H_0:\beta_1=\beta_2=\beta_4=0$, es decir, al menos una variable explica significativamente la resistencia.
+- **Significancia de los** $\hat\beta_i$: `Longitud` ($p < 2\times10^{-16}$), `Altura.matriz` ($p = 0.0015$) y `Altura.amarre` ($p = 0.0005$) son significativas a $\alpha = 0.05$. Sus intervalos de confianza al 95% no contienen al cero: $(2.354, 2.716)$, $(0.0037, 0.0134)$ y $(1.294, 3.905)$ respectivamente. El intercepto no es significativo ($p = 0.116$; su intervalo $(-0.367, 3.101)$ contiene al cero).
+- **Economía:** el modelo tiene solo 3 predictoras, todas significativas, y un $R^2$ ajustado incluso ligeramente mayor que el del modelo completo
+
+## 5. Validación del modelo
+
+```{r}
+res <- B$residuals
+aj  <- B$fitted.values
+```
+
+### 5.1 Normalidad de los residuos
+
+```{r}
+shapiro.test(res)         # H0: los residuos son normales
+qqnorm(res); qqline(res, col = "red")
+hist(res, main = "Histograma de residuos", xlab = "Residuos", col = "lightblue")
+```
+
+La prueba de Shapiro-Wilk da $W = 0.984$ y valor p $= 0.9504 > 0.05$, por lo que no se rechaza la normalidad. En el Q-Q plot los puntos siguen la recta, con ligeras desviaciones en las colas (los dos residuos más negativos, cerca de $-3$). El histograma es aproximadamente simétrico y de forma acampanada, con un ligero hueco entre $-3$ y $-2$.
+
+### 5.2 Media cero
+
+```{r}
+t.test(res)               # H0: media = 0
+mean(res)
+```
+
+La media de los residuos es $3.2\times10^{-17}$ y la prueba t da valor p $= 1$, así que no se rechaza que la media sea cero. Esto es esperable, pues un modelo de mínimos cuadrados con intercepto siempre produce residuos de media cero.
+
+### 5.3 Homocedasticidad
+
+```{r}
+plot(aj, res, pch = 19, xlab = "Valores ajustados", ylab = "Residuos",
+     main = "Residuos vs ajustados")
+abline(h = 0, col = "blue")
+
+bptest(B)                 # Breusch-Pagan, H0: varianza constante
+```
+
+Los residuos se reparten de forma aleatoria alrededor de cero, sin forma de embudo. La prueba de Breusch-Pagan da $BP = 2.88$ y valor p $= 0.4104 > 0.05$, por lo que no se rechaza varianza constante. En la gráfica de diagnóstico de `plot(B)` la línea suavizada muestra una ligera curvatura, que se considera un alejamiento leve y no cambia la conclusión.
+
+### 5.4 Independencia
+
+```{r}
+plot(res, type = "b", pch = 19, xlab = "Orden de observación", ylab = "Residuos")
+abline(h = 0, col = "blue")
+dwtest(B)                 # Durbin-Watson, H0: no hay autocorrelación
+```
+
+Los residuos graficados en orden no muestran un patrón sistemático (solo una racha corta de residuos negativos al inicio). La prueba de Durbin-Watson da $DW = 1.669$ y valor p $= 0.1814 > 0.05$, así que no se rechaza la ausencia de autocorrelación. Esta conclusión también depende de que las observaciones se hayan obtenido de forma independiente en el experimento.
+
+## 6. Conclusiones
+
+- **Modelo final:** $$\hat Y = 1.367 + 2.535 \times \text{Longitud} + 0.0085 \times \text{Altura.matriz} + 2.599 \times \text{Altura.amarre}$$
+
+- **Variables importantes:** la longitud del alambre es, con mucha diferencia, el factor más influyente en la resistencia al desprendimiento: manteniendo las demás variables constantes, cada unidad adicional de longitud se asocia con un aumento de unas $2.53$ unidades de resistencia. La altura de la matriz también tiene un efecto positivo, pero pequeño por unidad: $+0.0085$ por unidad, es decir, cerca de $+0.85$ por cada $100$ unidades de altura. La altura del amarre se asocia con un aumento de unas $2.6$ unidades por cada nivel, aunque con un intervalo de confianza amplio ($1.29$ a $3.90$), por lo que la estimación es menos precisa.
+
+- **Altura.poste:** no aporta una mejora significativa una vez que se consideran las otras variables ($p = 0.45$). Su correlación con la resistencia ($0.836$) se debe en buena parte a que está relacionada con la longitud y con la altura del amarre, y por eso se excluye del modelo.
+
+- **Ajuste:** el modelo explica alrededor del $98.9\%$ de la variabilidad de la resistencia ($R^2$ ajustado $= 0.988$), es globalmente significativo ($p < 2.2\times10^{-16}$) y tiene un error residual de $1.74$ unidades.
+
+- **Supuestos:** los residuos cumplen normalidad, media cero, homocedasticidad e independencia, con solo alejamientos leves, por lo que la inferencia (pruebas t, F e intervalos) es confiable.
+
+- **Limitaciones:**
+
+  - La muestra es pequeña ($n = 25$) y hay un punto extremo de longitud y resistencia altas que conviene vigilar.
+  - `Altura.amarre` es discreta (la mayoría de las observaciones vale 1), por lo que su efecto se estima con pocos datos en los niveles altos.

@@ -1,0 +1,177 @@
+---
+title: "Actividad 1.8"
+author: "Hugo Meza"
+date: "2026-11-24"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MVN)
+library(psych)
+```
+
+# Actividad 1.8 Análisis Factorial II
+
+## 1. Limpieza de datos
+
+```{r}
+M <- read.csv("../../data/cars93.csv")
+M <- na.omit(M)
+names(M) <- c("mpg", "cilindros", "mileage", "horsepower", "weight",
+              "acceleration", "model_year", "origin", "car name")
+summary(M)
+```
+
+Podemos observar que la variable `origin` está categorizada en números del 1 al 3, representando al origen nacional, extranjero y desconocido.
+
+## 2. Reducción de matriz de datos
+
+```{r}
+M1 <- M[, c(-8, -9)]
+```
+
+De esta forma, mantenemos una matriz de datos exclusivamente de valores numéricos. Con esto podemos realizar un análisis factorial.
+
+## 3. Pruebas de normalidad
+
+Comprobamos si las variables provienen de una población normal multivariada. Para este caso, se utiliza el Test de Mardia
+
+```{r}
+result <- mvn(M1, mvn_test = "mardia")
+result$multivariate_normality
+result$univariate_normality
+```
+
+En este caso, podemos observar que la prueba de Mardia indica que no hay normalidad multivariada dentro de la matriz de datos. Por otra parte, podemos ver que igual en las pruebas univariadas, ninguna variable presenta tendencias de normalidad según las pruebas de Anderson-Darling.
+
+## 4. Pruebas de correlación
+
+Comprobamos la correlación entre variables dos a dos y en conjuntos.
+
+### 4.1 Correlación por pares
+
+```{r}
+Corr <- corr.test(M1,adjust="none")  # M es la matriz de datos
+cat("Matriz de correlaciones (r): \n")
+round(Corr$r, 4)
+
+cat("\nMatriz de Valores p (Significancia por pares):\n")
+round(Corr$p, 4)
+```
+
+Las variables físicas del vehículo tienen una correlación negativa muy fuerte con el rendimiento de combustible:
+
+- **Peso (`weight`):** $r = -0.8322$ (el predictor individual más fuerte: a más peso, mucho menor rendimiento).
+
+- **Cilindrada (`mileage`):** $r = -0.8051$
+
+- **Potencia (`horsepower`):** $r = -0.7784$
+
+- **Cilindros (`cilindros`):** $r = -0.7776$
+
+Al observar los pares entre `cilindros`, `mileage`, `horsepower` y `weight`, todos presentan correlaciones positivas altísimas (entre $0.84$ y $0.95$). Estas cuatro variables miden prácticamente lo mismo ("qué tan grande y pesado es el auto"). Usar todas las variables puede traer problemas de **multicolinealidad**, haciendo inestables los coeficientes.
+
+En la matriz de valores $p$, aparecen en 0 (por redondeo, significa que son menores a $0.0001$). Como están muy por debajo del umbral estándar ($\alpha = 0.01$), todas las correlaciones entre pares son estadísticamente significativas. Es decir, los patrones observados existen en los datos y no se deben a una casualidad de la muestra.
+
+### 4.2 Prueba KMO
+
+```{r}
+K <- KMO(Corr$r)
+cat("El KMO global es:", round(K$MSA, 3), "\n")
+round(K$MSAi, 3)
+```
+
+- **KMO global =** 0.813: "meritorio" en la escala de Kaiser (1974). En la escala simplificada queda por encima de 0.80, es decir, adecuado.
+- **KMO individuales**: cilindros presenta el mejor desempeño (0.878, meritorio). mpg, mileage, horsepower, acceleration y weight están entre 0.70 y 0.89 (entre medio y meritorio). Podemos ver que la mayoría de las variables de forma individual presentan niveles adecuados para buscar los factores latentes en el análisis factorial. **model_year tiene 0.633 , mediocre**, porque comparte poca varianza con el resto.
+
+## 5. Análisis de Componentes Principales
+
+Realizamos un PCA en la matriz de datos.
+
+```{r}
+summary(prcomp(M1, scale = TRUE))
+```
+
+```{r}
+round(prcomp(M1, scale = TRUE)$rotation[, 1:3], 3)
+```
+
+Cada componente principal captura un porcentaje específico de la variabilidad total de las 7 variables estandarizadas:
+
+- **PC1 (71.58%):** Concentra la gran mayoría de la información del conjunto de datos. Refleja la alta colinealidad observada en la matriz de correlaciones: resume en una sola dimensión el eje general de tamaño, peso, potencia y rendimiento (`mpg`, `weight`, `cilindros`, `mileage`, `horsepower`).
+
+- **PC2 (12.37%):** Explica la segunda mayor fuente de variación independiente, capturando información no redundante con el tamaño/potencia (como lo asociado a `model_year`). Entre **PC1 y PC2** acumulan el **83.95%** de la varianza total.
+
+- **PC3 (10.41%):** Aporta una porción relevante de variabilidad adicional. Al sumar los primeros tres componentes, se retiene el **94.35%** de toda la información original. Describe principalmente la variable de `acceleration`.
+
+- **PC4 (2.63%) y PC5 (1.74%):** Su aporte individual es marginal (juntos suman apenas 4.37%), llevando la varianza acumulada al **96.98%** y **98.72%**, respectivamente.
+
+- **PC6 (0.78%) y PC7 (0.50%):** Representan ruido residual o variaciones mínimas casi nulas, completando el **100.00%** de la varianza total.
+
+Con los primeros 2 componentes ya se supera el 80% de la varianza acumulada, y con los primeros 3 se alcanza un 94.35%. Con esto podemos observar que la reducción a 3 variables presenta una pérdida de información aceptable (menor al 6%)
+
+## 6. Número de componentes recomendables
+
+```{r}
+scree(M1, main = "Gráfica de sedimentación (Cattell)")
+eigen(Corr$r)$values
+```
+
+```{r}
+set.seed(123)
+pa_mr <- fa.parallel(M1, fm = "ml", fa = "fa")
+```
+
+Los valores propios de la matriz de correlaciones son 5.011, 0.866, 0.728, 0.184, 0.122, 0.054 y 0.035. Con el criterio de Kaiser (valor propio \> 1) solo se retendría un componente. Sin embargo, el gráfico de sedimentación muestra que el codo ocurre después del tercer componente: los valores propios 2 y 3 todavía son considerables (0.87 y 0.73) y a partir del cuarto caen bruscamente (0.18). Además, con tres componentes se explica el 94.35% de la varianza acumulada. Por lo tanto, se recomienda retener 3 componentes. El análisis paralelo sugiere 3 factores de igual forma.
+
+## 7. Análisis factorial
+
+```{r}
+R <- Corr$r
+fa_vari <- fa(R, nfactors = 3, rotate = "varimax",   fm = "mle", n.obs = nrow(M1))
+fa_quar <- fa(R, nfactors = 3, rotate = "quartimax", fm = "mle", n.obs = nrow(M1))
+
+print(fa_vari$loadings, cutoff = 0.3)
+print(fa_quar$loadings, cutoff = 0.3)
+round(fa_vari$communality, 3)
+fa.diagram(fa_vari)
+fa.diagram(fa_quar)
+```
+
+Se aplicó un análisis factorial por máxima verosimilitud con 3 factores y dos rotaciones ortogonales. Con varimax, los tres factores explican en conjunto el 86.8% de la varianza (48.3%, 20.1% y 18.4%), y la estructura es clara. El primer factor agrupa `cilindros` (0.885), `mileage` (0.910), `weight` (0.874) y `horsepower` (0.742). El segundo agrupa `mpg` (0.785) y `model_year` (0.586). El tercero está dominado por `acceleration` (0.946). Con quartimax se obtiene la misma varianza total explicada, pero concentrada en un factor general (68.1%) que carga alto en casi todas las variables, incluida `mpg` (-0.877).. Se elige la rotación varimax porque reparte mejor las cargas y facilita la interpretación.
+
+Hay que señalar dos limitaciones. Primero, `mpg` y `acceleration` tienen comunalidades de 0.995, lo que indica que el modelo las reproduce casi perfectamente, algo poco realista. Segundo, el ajuste global es pobre (RMSEA = 0.30). Ambas cosas son congruentes con la falta de normalidad multivariada detectada en la sección 3, que es un supuesto del método de máxima verosimilitud.
+
+## 8. Composiciones lineales
+
+Con las variables estandarizadas y las cargas de varimax. Consideraciones: `psych` imprime los factores en el orden ML1, ML3, ML2, así que aquí F2 = ML3 y F3 = ML2.
+
+$$\begin{aligned}
+mpg &= -0.602F_1 + 0.785F_2 + 0.129F_3 + e_1\\
+cilindros &= 0.885F_1 - 0.273F_2 - 0.239F_3 + e_2\\
+mileage &= 0.910F_1 - 0.284F_2 - 0.272F_3 + e_3\\
+horsepower &= 0.742F_1 - 0.348F_2 - 0.458F_3 + e_4\\
+weight &= 0.874F_1 - 0.369F_2 - 0.131F_3 + e_5\\
+acceleration &= -0.257F_1 + 0.187F_2 + 0.946F_3 + e_6\\
+model\_year &= -0.168F_1 + 0.586F_2 + 0.147F_3 + e_7
+\end{aligned}$$
+
+**Factor 1, tamaño y potencia del motor:** las variables que más influyen son `mileage` (cilindrada), `weight` y `cilindros`. Autos con valores altos en este factor son grandes, pesados y potentes, y en consecuencia rinden menos (`mpg` carga -0.602).
+
+**Factor 2, eficiencia y modernidad:** lo dominan `mpg` y `model_year`. Representa la mejora en rendimiento de los autos más recientes, independiente de su tamaño.
+
+**Factor 3, aceleración:** depende casi solo de `acceleration`, con una contribución negativa de `horsepower` (-0.458). Como `acceleration` mide el tiempo para llegar a cierta velocidad, más potencia implica menor tiempo.
+
+`model_year` es la variable peor representada (comunalidad de 0.39): el 61% de su varianza es específica y no la explican los factores comunes. Esto concuerda con su KMO individual mediocre (0.633).
+
+## 9. Diferencias entre PCA y FA
+
+El análisis de componentes principales es una técnica de reducción de dimensión: construye combinaciones lineales de las variables observadas que maximizan la varianza total explicada, sin suponer ningún modelo subyacente. Cada componente es una función de las variables. El análisis factorial, en cambio, es un modelo estadístico que supone que las variables observadas son generadas por un número menor de factores latentes no observables más un error específico de cada variable. Cada variable es una función de los factores. Por ello, PCA explica la varianza total (incluyendo la varianza única y el error), mientras que FA explica solo la varianza común, es decir, las correlaciones entre variables. Además, FA estima comunalidades y unicidades, admite rotaciones para facilitar la interpretación y, con máxima verosimilitud, requiere supuestos como la normalidad multivariada y permite evaluar el ajuste. En estos datos, PCA con 3 componentes explica el 94.35% de la varianza total, mientras que FA con 3 factores explica el 86.8%, porque no incluye la varianza específica de cada variable.
+
+# Declaratoria de uso de IA durante el desarrollo de trabajo
+
+No se utilizó IA. Declaro que durante la elaboración de esta actividad de aprendizaje para evaluar no utilicé herramientas de Inteligencia Artificial generativa.

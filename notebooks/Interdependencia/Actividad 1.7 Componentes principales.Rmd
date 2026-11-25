@@ -1,0 +1,412 @@
+---
+title: "Actividad 1.7"
+author: "Hugo Meza"
+date: "2026-11-18"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+```{r}
+library(stats)
+library(FactoMineR)
+library(ggplot2)
+library(factoextra)
+```
+
+# Actividad 1.7 Componentes principales
+
+```{r}
+M <- read.csv("../../data/paises_mundo.csv")
+str(M)
+vars <- c("CrecPobl", "MortInf", "PorcMujeres", "PNB95", "ProdElec", "LinTelf",           "ConsAgua", "PropBosq", "PropDefor", "ConsEner", "EmisCO2") 
+X <- M[, vars]
+X <- na.omit(X)
+dim(X)
+```
+
+```{r}
+# Las escalas tan distintas son clave para comparar S vs R 
+round(sapply(X, function(v) c(media = mean(v), var = var(v), sd = sd(v))), 2)
+```
+
+Las variables están en escalas muy distintas. PNB95 y ProdElec tienen varianzas del orden de $10^{10}$, mientras que CrecPobl o PropDefor tienen varianzas cercanas a 1. Solo PNB95 y ProdElec concentran el 73.29% y el 26.71% de la varianza total, respectivamente, es decir, prácticamente el 100% entre las dos. Esto será determinante en el análisis con la matriz de covarianzas.
+
+# PARTE I
+
+Realiza el análisis de los valores y vectores propios con la matriz de covarianzas y con la de correlación. Analiza la varianza explicada por cada componente en cada caso e interpreta dentro del contexto del problema.
+
+Considera:
+
+| Variable | Código | Descripción |
+|:---|:---|:---|
+| **X1** | `CrecPobl` | Tasa de crecimiento poblacional |
+| **X2** | `MortInf` | Tasa de mortalidad infantil por cada 1000 nacidos vivos |
+| **X3** | `PorcMujeres` | Porcentaje de mujeres en la población activa |
+| **X4** | `PNB95` | Producto nacional bruto (indicador econométrico) |
+| **X5** | `ProdElec` | Producción de electricidad en millones de kW/h |
+| **X6** | `LinTelf` | Líneas telefónicas por cada 1000 habitantes |
+| **X7** | `ConsAgua` | Consumo de agua per cápita |
+| **X8** | `PropBosq` | Proporción de superficie nacional cubierta por bosques |
+| **X9** | `PropDefor` | Proporción de deforestación anual |
+| **X10** | `ConsEner` | Consumo de energía per cápita |
+| **X11** | `EmisCO2` | Emisión de CO2 per cápita |
+
+## A. Matriz de varianzas-covarianzas S
+
+### 1. Valores y vectores propios
+
+```{r}
+S <- cov(X)
+round(S, 2)
+
+eS <- eigen(S)
+lambdaS <- eS$values
+vecS <- eS$vectors
+rownames(vecS) <- vars
+colnames(vecS) <- paste0("CP", 1:length(vars))
+
+round(lambdaS, 4)
+round(vecS, 4)
+```
+
+Los vectores propios de S son prácticamente los vectores canónicos: cada componente está dominada por una sola variable original (CP3 por ConsEner, CP4 por ConsAgua, CP5 por LinTelf, CP6 por MortInf, etc.), con coeficientes cercanos a $\pm 1$. Es decir, con S las componentes no combinan variables, solo las reordenan según el tamaño de su varianza.
+
+### 2. Proporción de varianza explicada
+
+```{r}
+vtS <- sum(diag(S))
+c(suma_diag_S = vtS, suma_lambdas = sum(lambdaS))  # Son iguales :)
+propS <- lambdaS / vtS
+```
+
+Se comprueba que la suma de la diagonal de S (suma de las varianzas de las variables) es igual a la suma de los valores propios (suma de las varianzas de las componentes), ambas iguales a $6.8222 \times 10^{10}$.
+
+### 3. Varianza acumulada
+
+```{r}
+acumS <- cumsum(propS)
+tablaS <- data.frame(CP = colnames(vecS), lambda = round(lambdaS, 4),
+                     proporcion = round(propS, 4), acumulada = round(acumS, 4))
+tablaS
+```
+
+### 4. Componentes más importantes
+
+```{r}
+which(acumS >= 0.80)[1]
+```
+
+Con S, CP1 explica el 90.35% de la varianza y CP2 el 9.65%, de modo que las dos primeras acumulan el 99.99%. Desde CP3 en adelante la aportación es prácticamente nula. Por el criterio del 80%, bastaría con CP1, y con CP1 y CP2 se reproduce casi toda la varianza. Sin embargo, este resultado no indica una buena reducción de dimensión: solo refleja que PNB95 y ProdElec tienen varianzas enormes por estar medidas en unidades absolutas (millones), y las otras nueve variables quedan ignoradas.
+
+### 5. Combinaciones lineales CP1 y CP2
+
+```{r}
+ecuacion <- function(e, nombres) paste0(sprintf("%+.4f*%s", e, nombres), collapse = " ")
+cat("CP1 =", ecuacion(vecS[, 1], vars), "\n\n")
+cat("CP2 =", ecuacion(vecS[, 2], vars), "\n")
+```
+
+```{r}
+round(sort(abs(vecS[, 1]), decreasing = TRUE), 4)
+round(sort(abs(vecS[, 2]), decreasing = TRUE), 4)
+```
+
+Omitiendo los coeficientes menores a 0.001 en valor absoluto:
+
+$$CP_1 = 0.8880\,X_4 + 0.4598\,X_5 + 0.0025\,X_{10} + 0.0004\,X_6 + 0.0003\,X_7$$
+
+$$CP_2 = 0.4598\,X_4 - 0.8880\,X_5 - 0.0011\,X_7 + 0.0007\,X_{10} + 0.0004\,X_6$$
+
+Las variables que más contribuyen a CP1 y CP2 son únicamente PNB95 (X4) y ProdElec (X5). Los coeficientes de ConsEner, LinTelf y ConsAgua son del orden de $10^{-3}$ o menores, por lo que su contribución es despreciable. CP1 suma ambas variables con el mismo signo, así que mide el tamaño económico absoluto del país (economía grande y alta producción eléctrica). CP2 las contrasta: valores positivos corresponden a países con un PNB alto en relación con su producción de electricidad, y valores negativos a países que producen mucha electricidad en relación con su PNB.
+
+## B. Matriz de correlaciones R
+
+### 1. Valores y vectores propios
+
+```{r}
+R <- cor(X)
+round(R, 3)
+
+eR <- eigen(R)
+lambdaR <- eR$values
+vecR <- eR$vectors
+rownames(vecR) <- vars
+colnames(vecR) <- paste0("CP", 1:length(vars))
+
+round(lambdaR, 4)
+round(vecR, 4)
+```
+
+En la matriz de correlaciones destacan relaciones fuertes entre ConsEner y EmisCO2 (0.880), LinTelf y ConsEner (0.781), PNB95 y ProdElec (0.745) y LinTelf y EmisCO2 (0.624), así como relaciones negativas de MortInf con LinTelf (-0.696), ConsEner (-0.617) y EmisCO2 (-0.565). Esto indica que existe estructura común entre las variables que el ACP puede resumir.
+
+### 2. Proporción de varianza explicada
+
+```{r}
+vtR <- sum(diag(R))
+c(suma_diag_R = vtR, suma_lambdas = sum(lambdaR))  # = 11
+propR <- lambdaR / vtR
+```
+
+Con R, cada variable estandarizada tiene varianza 1, por lo que la varianza total es igual al número de variables (11), y coincide con la suma de los valores propios.
+
+### 3. Varianza acumulada
+
+```{r}
+acumR <- cumsum(propR)
+tablaR <- data.frame(CP = colnames(vecR), lambda = round(lambdaR, 4),
+                     proporcion = round(propR, 4), acumulada = round(acumR, 4))
+tablaR
+```
+
+### 4. Componentes más importantes
+
+```{r}
+which(acumR >= 0.80)[1]   # criterio 80%
+```
+
+Con R la varianza se reparte entre varias componentes: CP1 explica el 36.64%, CP2 el 17.55% y CP3 el 12.46%, acumulando 66.64%. Las tres son las únicas con $\lambda > 1$ (4.03, 1.93 y 1.37), es decir, cada una explica más varianza que una variable original. Para alcanzar el 80% se necesitan cinco componentes (81.72%), pero CP4 y CP5 tienen $\lambda < 1$ y aportan poco cada una (7.86% y 7.22%).
+
+### 5. Combinaciones lineales CP1 y CP2
+
+```{r}
+# Con R las variables están estandarizadas: Z = (X - media) / sd
+cat("CP1 =", ecuacion(vecR[, 1], paste0("Z_", vars)), "\n\n")
+cat("CP2 =", ecuacion(vecR[, 2], paste0("Z_", vars)), "\n")
+```
+
+Con $Z_i$ la variable $X_i$ estandarizada:
+
+$$CP_1 = -0.3141 Z_1 - 0.3924 Z_2 + 0.1165 Z_3 + 0.2954 Z_4 + 0.2590 Z_5 + 0.4461 Z_6 + 0.0924 Z_7 + 0.0057 Z_8 - 0.2437 Z_9 + 0.4150 Z_{10} + 0.3745 Z_{11}$$
+
+$$CP_2 = 0.3484 Z_1 - 0.0414 Z_2 - 0.5828 Z_3 - 0.1769 Z_4 - 0.1736 Z_5 - 0.0272 Z_6 + 0.3206 Z_7 - 0.4574 Z_8 - 0.1541 Z_9 + 0.2329 Z_{10} + 0.2917 Z_{11}$$
+
+```{r}
+round(sort(abs(vecR[, 1]), decreasing = TRUE), 4)
+round(sort(abs(vecR[, 2]), decreasing = TRUE), 4)
+```
+
+En CP1 los coeficientes más grandes en valor absoluto son LinTelf (0.446), ConsEner (0.415), MortInf (-0.392), EmisCO2 (0.375), CrecPobl (-0.314) y PNB95 (0.295). Muchas variables participan con pesos similares, y los signos separan indicadores de desarrollo (telefonía, energía, emisiones, PNB) de indicadores de rezago (mortalidad infantil, crecimiento poblacional, deforestación). CP1 puede interpretarse como un índice de desarrollo o riqueza.
+
+En CP2 los coeficientes más grandes son PorcMujeres (-0.583), PropBosq (-0.457), CrecPobl (0.348) y ConsAgua (0.321). CP2 contrasta países con alta participación femenina en la población activa y alta cobertura forestal contra países con alto crecimiento poblacional y alto consumo de agua per cápita.
+
+```{r}
+par(mfrow = c(1, 2))
+plot(propS, type = "b", pch = 19, main = "Varianza explicada (S)",
+     xlab = "Componente", ylab = "Proporción")
+plot(propR, type = "b", pch = 19, main = "Varianza explicada (R)",
+     xlab = "Componente", ylab = "Proporción")
+abline(h = 1 / length(vars), lty = 2)
+par(mfrow = c(1, 1))
+```
+
+Con S la curva cae de golpe después de CP1. Con R la caída es gradual y el codo aparece alrededor de la tercera o cuarta componente. La línea punteada marca $1/11$, la proporción que explicaría una sola variable original.
+
+# PARTE II
+
+## 1. princomp con S y con R
+
+```{r}
+cpS <- princomp(X, cor = FALSE)
+cpR <- princomp(X, cor = TRUE)
+
+summary(cpS)   # sd de cada CP, proporción y proporción acumulada
+summary(cpR)
+
+cpS$loadings   # vectores propios (en blanco los coeficientes |e| < 0.1)
+cpR$loadings
+```
+
+`summary()` muestra la desviación estándar de cada componente (raíz del valor propio), la proporción de varianza y la proporción acumulada. `$loadings` contiene los vectores propios (las columnas son los coeficientes $e_i$ de cada componente) y deja en blanco los coeficientes menores a 0.1 en valor absoluto para facilitar la lectura. Las filas "SS loadings" y "Proportion Var" del final no son la varianza explicada: valen 1 y 1/11 porque cada vector propio tiene norma 1. `$scores` contiene las puntuaciones de cada observación.
+
+Diferencias con `eigen()`: `princomp` divide entre $n$ en lugar de $n-1$, por lo que sus varianzas son ligeramente menores, aunque las proporciones son iguales; y algunos vectores tienen el signo invertido (por ejemplo CP1 con R), porque un vector propio está definido salvo signo. Esto no cambia la interpretación, solo la orientación del eje.
+
+Nota a considerar: `princomp` usa divisor n en lugar de n-1, por eso sus varianzas (sdev\^2) difieren ligeramente de los lambdas de `eigen(cov(X))`; las proporciones son iguales. Los signos de los vectores pueden estar invertidos respecto a `eigen()`, lo cual no cambia la interpretación.
+
+## 2. Puntuaciones (scores) con S
+
+```{r}
+cpaS <- as.matrix(X) %*% cpS$loadings
+head(round(cpaS[, 1:2], 3))
+
+# princomp centra los datos: cpS$scores = (X - media) %*% loadings
+head(round(cpS$scores[, 1:2], 3))
+```
+
+`cpaS` y `cpS$scores` difieren solo por una traslación, porque `princomp` centra los datos antes de proyectarlos. La forma de la nube de puntos es la misma.
+
+## 3. Puntuaciones (scores) con R (variables estandarizadas)
+
+```{r}
+Z <- scale(X)
+cpaR <- Z %*% cpR$loadings
+head(round(cpaR[, 1:2], 3))
+
+head(round(cpR$scores[, 1:2], 3))  # mismo resultado salvo factor sqrt(n/(n-1))
+```
+
+## 4. Gráficas de las dos primeras componentes
+
+```{r}
+par(mfrow = c(1, 2))
+plot(cpaS[, 1:2], type = "p", pch = 19, col = "steelblue",
+     main = "Scores CP1 vs CP2 (S)", xlab = "CP1", ylab = "CP2")
+text(cpaS[, 1], cpaS[, 2], rownames(X), cex = 0.6, pos = 3)
+
+plot(cpaR[, 1:2], type = "p", pch = 19, col = "firebrick",
+     main = "Scores CP1 vs CP2 (R)", xlab = "CP1", ylab = "CP2")
+text(cpaR[, 1], cpaR[, 2], rownames(X), cex = 0.6, pos = 3)
+abline(h = 0, v = 0, lty = 2)
+par(mfrow = c(1, 1))
+```
+
+```{r}
+par(mfrow = c(1, 2))
+biplot(cpS, cex = 0.6, main = "Biplot (S)")
+biplot(cpR, cex = 0.6, main = "Biplot (R)")
+par(mfrow = c(1, 1))
+```
+
+En el biplot con S solo PNB95 y ProdElec tienen flechas visibles; las demás variables tienen longitud prácticamente cero (por eso R advierte que no puede dibujar varias flechas). Las componentes de S están determinadas por esas dos variables y no aportan información sobre las otras nueve. En el biplot con R todas las variables tienen flechas de longitud comparable. LinTelf, ConsEner y EmisCO2 apuntan en la misma dirección sobre CP1 y forman ángulos pequeños entre sí, lo que refleja su alta correlación; MortInf y CrecPobl apuntan en sentido opuesto, lo que refleja su correlación negativa con ellas. PorcMujeres y PropBosq se alinean sobre CP2, en sentido opuesto a CrecPobl y ConsAgua. PNB95 y ProdElec forman un ángulo pequeño entre sí y quedan a medio camino entre ambos ejes.
+
+Con S casi todos los países se concentran en una franja estrecha y solo se separan los que tienen un PNB y una producción eléctrica muy grandes, por lo que el gráfico solo ordena a los países por el tamaño de su economía. Con R la posición de cada país se interpreta con las flechas: un país con puntuación alta en el sentido de LinTelf, ConsEner y EmisCO2 es un país desarrollado (muchas líneas telefónicas, alto consumo de energía y altas emisiones per cápita), mientras que uno ubicado del lado de MortInf y CrecPobl es un país con alta mortalidad infantil y crecimiento poblacional, propio de países en desarrollo. Sobre CP2, los países ubicados del lado de PorcMujeres y PropBosq tienen mayor participación femenina y más bosque, y los del lado opuesto tienen mayor crecimiento poblacional y mayor consumo de agua.
+
+## 5. Detección de datos atípicos
+
+```{r}
+# Distancia en el plano CP1-CP2 estandarizada por la sd de cada componente
+d2 <- function(sc) (sc[, 1] / sd(sc[, 1]))^2 + (sc[, 2] / sd(sc[, 2]))^2
+lim <- qchisq(0.975, df = 2)
+
+dS <- d2(cpaS); dR <- d2(cpaR)
+idxS <- which(dS > lim); idxS <- idxS[order(-dS[idxS])]
+idxR <- which(dR > lim); idxR <- idxR[order(-dR[idxR])]
+
+data.frame(obs = idxS, d2 = round(dS[idxS], 2))
+data.frame(obs = idxR, d2 = round(dR[idxR], 2))
+X[idxR, ]
+```
+
+Se considera atípica una observación cuya distancia estandarizada en el plano CP1-CP2 supera $\chi^2_{2,\,0.975} = 7.38$. Con S se detectan seis observaciones, que son los países con PNB95 y ProdElec muy por encima del resto, es decir, las economías más grandes; son atípicas por su tamaño absoluto y no necesariamente por su nivel de desarrollo. Con R se detectan cuatro; la más extrema es la observación 31, que se separa claramente sobre CP2 (muy baja participación femenina y cobertura forestal, alto consumo de agua y crecimiento poblacional). Los valores originales de la tabla confirman en qué variables se aleja cada una.
+
+# PARTE III: FactoMineR y factoextra
+
+## 1. Con matriz de varianzas-covarianzas
+
+```{r}
+pcaS <- PCA(X, scale.unit = FALSE, graph = FALSE) 
+pcaS$eig              # valores propios, % de varianza y % acumulado 
+pcaS$var$coord[, 1:2] # coordenadas de las variables
+```
+
+```{r}
+fviz_pca_ind(pcaS, col.ind = "blue", addEllipses = TRUE, repel = FALSE, title = "Individuos (S)")
+fviz_pca_var(pcaS, col.var = "red", repel = TRUE, title = "Variables (S)")
+fviz_screeplot(pcaS, addlabels = TRUE, main = "Scree plot (S)")
+fviz_contrib(pcaS, choice = "var", axes = 1, title = "Contribución a CP1 (S)")
+fviz_contrib(pcaS, choice = "var", axes = 2, title = "Contribución a CP2 (S)")
+```
+
+En los individuos (S), casi todos los países se amontonan cerca del origen y solo unos pocos (las economías más grandes) se separan. En variables(S) con `scale.unit = FALSE` las coordenadas de las variables son covarianzas con las componentes, no correlaciones, por eso no se dibuja el círculo unitario y las escalas llegan a $2 \times 10^5$. Solo PNB95 y ProdElec se alejan del origen.
+
+En el Scree Plot se muestra el porcentaje de varianza de cada componente: 90.3% y 9.6% para las dos primeras y prácticamente 0% después. En las contribuciones (S) el porcentaje con que cada variable contribuye a la componente; la línea punteada roja marca la contribución esperada si todas aportaran igual ($100/11 = 9.09\%$). En CP1 y CP2 solo PNB95 y ProdElec superan esa línea, y entre ambas aportan casi el 100%.
+
+## 2. Con matriz de correlaciones (scale.unit = TRUE)
+
+```{r}
+pcaR <- PCA(X, scale.unit = TRUE, graph = FALSE)
+pcaR$eig
+pcaR$var$coord[, 1:2]  # correlación de cada variable con CP1 y CP2
+pcaR$var$cos2[, 1:2]   # calidad de representación
+pcaR$var$contrib[, 1:2]
+```
+
+```{r}
+fviz_pca_ind(pcaR, col.ind = "blue", addEllipses = TRUE, repel = FALSE,
+             title = "Individuos (R)")
+fviz_pca_var(pcaR, col.var = "red", repel = TRUE, title = "Variables (R)")
+fviz_screeplot(pcaR, addlabels = TRUE, main = "Scree plot (R)")
+fviz_contrib(pcaR, choice = "var", axes = 1, title = "Contribución a CP1 (R)")
+fviz_contrib(pcaR, choice = "var", axes = 2, title = "Contribución a CP2 (R)")
+```
+
+FactoMineR invierte el signo de la segunda componente respecto a `eigen()`. Aquí PorcMujeres tiene correlación positiva con Dim2 (0.81), mientras que en `eigen()` su coeficiente en CP2 es negativo. La interpretación es la misma con el eje volteado.
+
+**Individuos (R):** los países se distribuyen en todo el plano. Hacia la derecha están los países con alto desarrollo (telefonía, energía, emisiones) y hacia la izquierda los de alta mortalidad infantil y crecimiento poblacional. La observación 31 queda aislada en la parte inferior.
+
+**Variables (R):** es el círculo de correlaciones. Cada flecha es la correlación de la variable con Dim1 y Dim2, y una flecha cercana al círculo indica que la variable está bien representada en el plano. LinTelf (0.90), ConsEner (0.83), EmisCO2 (0.75) y MortInf (-0.79) tienen las correlaciones más fuertes con Dim1; PorcMujeres (0.81) y PropBosq (0.64) con Dim2. ConsAgua y PropDefor tienen flechas cortas, por lo que están mal representadas en este plano (su cos2 acumulado es 0.23 y 0.28).
+
+**Scree plot (R):** la varianza decrece gradualmente (36.6%, 17.5%, 12.5%, 7.9%, 7.2%, ...), sin una componente que acapare todo.
+
+**Contribuciones (R):** a Dim1 contribuyen por encima del promedio LinTelf (19.9%), ConsEner (17.2%), MortInf (15.4%), EmisCO2 (14.0%) y CrecPobl (9.9%); a Dim2, PorcMujeres (34.0%), PropBosq (20.9%), CrecPobl (12.1%) y ConsAgua (10.3%).
+
+## 3. Opciones adicionales de PCA y factoextra
+
+```{r}
+# Biplot de individuos y variables
+fviz_pca_biplot(pcaR, repel = TRUE, col.var = "red", col.ind = "gray40")
+
+# Variables coloreadas por contribución
+fviz_pca_var(pcaR, col.var = "contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE)
+
+# Individuos coloreados por cos2 (calidad de representación)
+fviz_pca_ind(pcaR, col.ind = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE)
+
+# Descripción automática de las dimensiones
+dimdesc(pcaR, axes = 1:2, proba = 0.05)
+```
+
+`PCA()` permite elegir entre S y R con `scale.unit`, el número de componentes a guardar con `ncp`, excluir observaciones del cálculo y solo proyectarlas con `ind.sup` (útil para revisar el efecto de los atípicos), agregar variables suplementarias cuantitativas o cualitativas con `quanti.sup` y `quali.sup`, y asignar pesos con `row.w` y `col.w`. El objeto devuelve `$eig`, `$var` (coord, cor, cos2, contrib) e `$ind` (coord, cos2, contrib). `dimdesc()` lista, para cada dimensión, las variables significativamente correlacionadas con ella, lo que confirma la interpretación: Dim1 se asocia positivamente con LinTelf, ConsEner, EmisCO2, PNB95 y ProdElec, y negativamente con MortInf, CrecPobl y PropDefor; Dim2 se asocia positivamente con PorcMujeres y PropBosq, y negativamente con CrecPobl, ConsAgua y EmisCO2.
+
+## 4. Verificación con prcomp
+
+```{r}
+summary(prcomp(X, scale. = FALSE)) 
+summary(prcomp(X, scale. = TRUE))
+```
+
+# PARTE IV: Comparación y conclusiones
+
+```{r}
+data.frame(CP = 1:length(vars),
+           prop_S = round(propS, 4), acum_S = round(acumS, 4),
+           prop_R = round(propR, 4), acum_R = round(acumR, 4))
+```
+
+Con S, dos componentes explican el 99.99% de la varianza, pero este porcentaje es engañoso. Las componentes son prácticamente PNB95 y ProdElec, las dos variables medidas en millones, y las nueve restantes no participan. El análisis con S no resume la información de los indicadores; solo refleja las unidades de medida. Con R, las primeras componentes explican menos varianza (66.64% con tres), pero cada una combina varias variables con pesos comparables y tiene una interpretación clara en el contexto del problema. Por lo tanto, el procedimiento que aporta componentes de mayor interés es el de la matriz de correlaciones.
+
+Para los indicadores económicos y sociales de los 96 países resulta mejor el ACP con la matriz de correlaciones. Las variables están en unidades no comparables (tasas por cada 1000, porcentajes, millones de kW/h, PNB), y estandarizarlas evita que la variable con mayor varianza domine el análisis.
+
+En CP1 contribuyen sobre todo LinTelf, ConsEner, MortInf, EmisCO2 y CrecPobl, que son los coeficientes de mayor valor absoluto y las contribuciones por encima del 9.09% esperado. En CP2 contribuyen PorcMujeres, PropBosq, CrecPobl y ConsAgua.
+
+Se recomienda conservar las tres componentes con $\lambda > 1$, que explican el 66.64% de la varianza:
+
+```{r}
+round(vecR[, 1:3], 4)
+```
+
+$$CP_1 = -0.3141 Z_1 - 0.3924 Z_2 + 0.1165 Z_3 + 0.2954 Z_4 + 0.2590 Z_5 + 0.4461 Z_6 + 0.0924 Z_7 + 0.0057 Z_8 - 0.2437 Z_9 + 0.4150 Z_{10} + 0.3745 Z_{11}$$
+
+$$CP_2 = 0.3484 Z_1 - 0.0414 Z_2 - 0.5828 Z_3 - 0.1769 Z_4 - 0.1736 Z_5 - 0.0272 Z_6 + 0.3206 Z_7 - 0.4574 Z_8 - 0.1541 Z_9 + 0.2329 Z_{10} + 0.2917 Z_{11}$$
+
+$$CP_3 = -0.0735 Z_1 - 0.1776 Z_2 + 0.1669 Z_3 - 0.5334 Z_4 - 0.6144 Z_5 + 0.1518 Z_6 - 0.3702 Z_7 + 0.1648 Z_8 - 0.0296 Z_9 + 0.2061 Z_{10} + 0.2063 Z_{11}$$
+
+CP1 es un **índice de desarrollo o riqueza**: agrupa con signo positivo los indicadores per cápita de bienestar e industrialización (LinTelf, ConsEner, EmisCO2) junto con PNB95 y ProdElec, y con signo negativo los indicadores de rezago (MortInf, CrecPobl, PropDefor). Un país con CP1 alto es desarrollado, y uno con CP1 bajo tiene alta mortalidad infantil, alto crecimiento poblacional y mayor deforestación. CP2 es un **índice socioambiental**: contrapone la participación femenina en la población activa y la cobertura forestal frente al crecimiento poblacional y el consumo de agua per cápita, y distingue países que en desarrollo podrían ser similares. CP3 es un **índice de tamaño económico**: lo dominan PNB95 y ProdElec, que son magnitudes totales y no per cápita, por lo que separa a las economías grandes de las pequeñas independientemente de su nivel de desarrollo. En conjunto, la estructura de los datos se resume en tres dimensiones: nivel de desarrollo, perfil socioambiental y tamaño de la economía.
+
+# Declaratoria de uso de IA durante el desarrollo de trabajo
+
+Se utilizó IA de la siguiente forma:
+
+- Herramienta: Gemini 4 Hydrogen
+
+- Uso realizado: Mejora en visualización de resultados de la información calculada (tablas y gráficos).
+
+- Secciones donde se utilizó: Secciones con tablas y gráficas.
+
+- Validación realizada por los estudiantes: Al ser modificaciones de visualización, se confirmó que la información recabada no fuera distorcionada.
+
+- Se confirma que el contenido final entregado fue revisado, verificado y que se asume la responsabilidad del contenido final entregado.

@@ -1,0 +1,235 @@
+---
+title: "Actividad 2.6"
+author: "Hugo Meza"
+date: "2026-11-23"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = "center")
+library(MASS)
+```
+
+# Actividad 2.6 Análisis discriminante
+
+```{r}
+M <- read.csv("../../data/kc_house_data.csv")
+summary(M)
+```
+
+```{r}
+sort(unique(M$grade))
+
+M |> dplyr::count(grade)
+```
+
+La base de datos corresponde a ventas de viviendas en King County, Washington (Estados Unidos), no en Reino Unido. Identificamos que `grade` es una buena opción de variable categórica: es la calificación que asigna el condado a la calidad de construcción y diseño de la vivienda, en una escala de 1 a 13. Se descartó `condition` porque sus clases se traslapan casi por completo en todas las variables numéricas, y en pruebas preliminares el modelo con esa variable no superaba la regla trivial de asignar siempre la clase mayoritaria. Por otra parte, `grade` tiene niveles con muy pocas observaciones en los extremos (por ejemplo, solo 1 casa con grade 1 y 13 con grade 13), por lo que es necesario agruparla y estratificar al hacer el muestreo aleatorio.
+
+# 1. Definición de variable categórica
+
+Se agrupa `grade` en tres clases: Baja (grade 7 o menor, calidad promedio o inferior), Media (grade 8, calidad buena) y Alta (grade 9 o mayor, calidad superior). Esta agrupación produce clases de tamaño razonable y conserva tres grupos, lo que permite obtener dos funciones discriminantes.
+
+Como variables independientes se usan seis variables numéricas: precio (`price`), superficie habitable (`sqft_living`), superficie del terreno (`sqft_lot`), número de baños (`bathrooms`), número de recámaras (`bedrooms`) y año de construcción (`yr_built`). Las variables `price`, `sqft_living` y `sqft_lot` tienen una fuerte asimetría positiva, por lo que se transforman con logaritmo natural para acercarlas a una distribución normal, supuesto del análisis discriminante lineal.
+
+```{r}
+M$grupo <- factor(ifelse(M$grade <= 7, "Baja", ifelse(M$grade == 8, "Media", "Alta")),
+                  levels = c("Baja", "Media", "Alta"))
+M$log_price       <- log(M$price)
+M$log_sqft_living <- log(M$sqft_living)
+M$log_sqft_lot    <- log(M$sqft_lot)
+
+vars <- c("log_price", "log_sqft_living", "log_sqft_lot", "bathrooms", "bedrooms", "yr_built")
+table(M$grupo)
+round(prop.table(table(M$grupo)), 4)
+```
+
+# 2. Muestreo aleatorio (300 observaciones)
+
+Se realiza un muestreo aleatorio estratificado proporcional, de modo que la muestra conserve la distribución de clases de la base completa.
+
+```{r}
+set.seed(2026)
+n_g <- round(300 * prop.table(table(M$grupo)))
+n_g[1] <- 300 - sum(n_g[-1])   # ajuste de redondeo para obtener exactamente 300
+idx <- unlist(lapply(names(n_g), function(g) sample(which(M$grupo == g), n_g[g])))
+D <- M[idx, c(vars, "grupo")]
+nrow(D)
+table(D$grupo)
+```
+
+# 3. Segmentación de datos
+
+## 3.1 Segmentación original
+
+```{r, fig.width=8, fig.height=8}
+cols <- c("tomato", "gold3", "seagreen")
+pairs(D[vars], col = cols[D$grupo], pch = 19, cex = 0.5,
+      main = "Grupos originales por grade")
+```
+
+```{r, fig.width=6, fig.height=4.5}
+plot(D$log_sqft_living, D$log_price, col = cols[D$grupo], pch = 19,
+     xlab = "log(sqft_living)", ylab = "log(price)",
+     main = "Superficie habitable vs. precio")
+legend("topleft", levels(D$grupo), col = cols, pch = 19, bty = "n")
+```
+
+Para identificar qué variables discriminan mejor se calcula el estadístico F de un ANOVA de una vía para cada predictora. Un valor de F mayor indica mayor diferencia entre las medias de los grupos en relación con la variabilidad dentro de ellos.
+
+```{r}
+F_vals <- sapply(vars, function(v) {
+  a <- summary(aov(D[[v]] ~ D$grupo))[[1]]
+  c(F = a[1, "F value"], p = a[1, "Pr(>F)"])
+})
+round(t(F_vals)[order(-F_vals["F", ]), ], 4)
+```
+
+En las gráficas de dispersión se observa una separación clara de los grupos en las variables de precio y superficie habitable: las casas de calidad Alta se ubican en la esquina superior derecha, las de calidad Baja en la inferior izquierda y las de calidad Media en una franja intermedia que se traslapa con ambas. Según el estadístico F, las variables que mejor discriminan son `log_price` (F = 139.97) y `log_sqft_living` (F = 134.28), seguidas de `bathrooms` (F = 78.21). Las variables `yr_built` (F = 34.09) y `bedrooms` (F = 28.65) también son significativas pero discriminan menos, y `log_sqft_lot` es la de menor poder discriminante (F = 8.25), aunque sigue siendo significativa (p \< 0.001).
+
+## 3.2 Conjuntos de entrenamiento y prueba
+
+Se divide la muestra en 70% entrenamiento y 30% prueba, también de forma estratificada.
+
+```{r}
+set.seed(2026)
+tr <- unlist(lapply(split(seq_len(nrow(D)), D$grupo),
+                    function(i) sample(i, round(0.7 * length(i)))))
+train <- D[tr, ]
+test  <- D[-tr, ]
+table(train$grupo)
+table(test$grupo)
+```
+
+# 4. Análisis discriminante
+
+## a) Media de cada variable predictora por grupo
+
+```{r}
+medias <- sapply(train[vars], function(x) tapply(x, train$grupo, mean))
+round(medias, 3)
+```
+
+Las medias aumentan de forma consistente de la clase Baja a la Alta en casi todas las variables. En escala original, el precio medio geométrico pasa de alrededor de 329,000 dólares en la clase Baja ($e^{12.704}$) a 465,000 en la Media ($e^{13.049}$) y 998,000 en la Alta ($e^{13.814}$). La superficie habitable pasa de unos 1,440 a 2,000 y 3,390 pies cuadrados, y el número de baños de 1.62 a 2.35 y 2.99. Las casas de calidad Baja también son más antiguas en promedio (1958) que las de calidad Media y Alta (1981 y 1984). La superficie del terreno solo es mayor en la clase Alta.
+
+## b) Probabilidades a priori
+
+```{r}
+round(prop.table(table(train$grupo)), 4)
+```
+
+Las probabilidades a priori son 52.38% para Baja, 28.10% para Media y 19.52% para Alta, y reflejan la proporción de la base original gracias al muestreo estratificado. Las clases están moderadamente desbalanceadas, por lo que el modelo favorecerá ligeramente a la clase Baja en los casos dudosos.
+
+## c) Funciones lineales discriminantes
+
+```{r}
+modelo <- lda(grupo ~ ., data = train)
+modelo
+```
+
+```{r}
+coef_ld <- modelo$scaling
+round(coef_ld, 4)
+prop_traza <- modelo$svd^2 / sum(modelo$svd^2)
+round(prop_traza, 4)
+
+# Término constante: MASS evalúa las funciones sobre las variables centradas
+centro <- colSums(modelo$prior * modelo$means)
+round(-centro %*% coef_ld, 4)
+```
+
+Con 3 grupos y 6 predictoras se obtienen $\min(k-1, p) = 2$ funciones discriminantes:
+
+$$\begin{aligned} LD_1 = {} & -64.4160 + 1.6788\,\log(price) + 1.3022\,\log(sqft\_living) + 0.0993\,\log(sqft\_lot) \\ & + 0.0943\,bathrooms - 0.0995\,bedrooms + 0.0162\,yr\_built \end{aligned}$$
+
+$$\begin{aligned} LD_2 = {} & 28.3451 + 0.5957\,\log(price) + 1.1651\,\log(sqft\_living) + 0.3823\,\log(sqft\_lot) \\ & - 0.7731\,bathrooms - 0.1316\,bedrooms - 0.0235\,yr\_built \end{aligned}$$
+
+La primera función explica el 95.80% de la separación entre grupos y la segunda solo el 4.20%. Como las variables están en escalas distintas, para comparar su importancia se calculan los coeficientes estandarizados, que se obtienen ajustando el mismo modelo con las variables estandarizadas. La estandarización no cambia las predicciones del modelo, solo la escala de los coeficientes.
+
+```{r}
+train_z <- train
+train_z[vars] <- scale(train_z[vars])
+round(lda(grupo ~ ., data = train_z)$scaling, 3)
+```
+
+En $LD_1$ el mayor peso lo tienen `log_price` (0.980), `log_sqft_living` (0.595) y `yr_built` (0.464), todos con signo positivo: valores altos de $LD_1$ corresponden a casas más caras, más grandes y más nuevas, es decir, de mayor calidad. $LD_2$ está dominada por `yr_built` (-0.672), `bathrooms` (-0.657) y `log_sqft_living` (0.532), y ayuda principalmente a separar la clase Media de las otras dos.
+
+## d) Histograma de valores discriminantes por grupo
+
+```{r, fig.width=6, fig.height=6}
+p_train <- predict(modelo, train)
+ldahist(p_train$x[, 1], g = train$grupo, col = "gray80")
+```
+
+```{r, fig.width=6, fig.height=6}
+ldahist(p_train$x[, 2], g = train$grupo, col = "gray80")
+```
+
+En el histograma de $LD_1$ los tres grupos quedan ordenados: la clase Baja se concentra en valores negativos (media de -1.08), la Media alrededor de 0.33 y la Alta en valores positivos altos (media de 2.42). Hay traslape entre grupos vecinos, sobre todo entre Baja y Media, pero las clases Baja y Alta están casi completamente separadas. En $LD_2$ las distribuciones de los tres grupos son muy parecidas, lo que confirma que la segunda función aporta poca separación adicional.
+
+## e) Segmentación con las predicciones del modelo
+
+```{r, fig.width=7.5, fig.height=5}
+p_test <- predict(modelo, test)
+par(mar = c(5, 4, 4, 9))
+plot(p_test$x[, 1], p_test$x[, 2], col = cols[p_test$class],
+     pch = c(15, 17, 19)[test$grupo], xlab = "LD1", ylab = "LD2",
+     main = "Predicciones del modelo (conjunto de prueba)")
+legend("topright", inset = c(-0.32, 0), xpd = TRUE, levels(D$grupo),
+       col = cols, pch = 19, title = "Clase predicha", bty = "n", cex = 0.8)
+legend("bottomright", inset = c(-0.32, 0), xpd = TRUE, levels(D$grupo),
+       pch = c(15, 17, 19), title = "Clase real", bty = "n", cex = 0.8)
+```
+
+El color de cada punto indica la clase predicha y la forma indica la clase real. Se observa que el modelo divide el plano principalmente a lo largo de $LD_1$: la clase Baja a la izquierda, la Media en el centro y la Alta a la derecha. Los errores se concentran en las fronteras entre clases vecinas.
+
+## f) Precisión del modelo
+
+```{r}
+t_train <- table(Real = train$grupo, Predicho = p_train$class)
+t_train
+t_test <- table(Real = test$grupo, Predicho = p_test$class)
+t_test
+
+error_train <- 1 - sum(diag(t_train)) / sum(t_train)
+error_test  <- 1 - sum(diag(t_test)) / sum(t_test)
+error_base  <- 1 - max(prop.table(table(test$grupo)))   # predecir siempre "Baja"
+round(100 * c(entrenamiento = error_train, prueba = error_test, referencia = error_base), 2)
+```
+
+En el conjunto de prueba el modelo clasifica incorrectamente el 24.44% de las observaciones (22 de 90), es decir, tiene una precisión de 75.56%. En entrenamiento el error es de 20.48%, un valor cercano, por lo que no hay señales fuertes de sobreajuste. Como referencia, un clasificador que siempre predice la clase mayoritaria (Baja) tendría un error de 47.78%, así que el modelo reduce el error casi a la mitad. La tabla de contingencia muestra que casi todos los errores ocurren entre clases vecinas: en el conjunto de prueba solo una casa de calidad Baja se clasificó como Alta, y ninguna casa Alta se clasificó como Baja. La clase más difícil es la Media (17 de 25 aciertos), porque se ubica entre las otras dos. En conclusión, el modelo es razonablemente bueno para pronosticar la categoría de calidad de una vivienda a partir de su precio, tamaño, número de baños y recámaras y año de construcción.
+
+# 5. Validación del modelo
+
+## Normalidad multivariante
+
+Hipótesis: $H_0$: los datos de cada grupo siguen una distribución normal multivariante; $H_1$: no la siguen. Se usa la prueba de Shapiro-Wilk multivariada por grupo con un nivel de significancia de 0.05.
+
+```{r}
+for (g in levels(train$grupo)) {
+  X <- t(as.matrix(train[train$grupo == g, vars]))
+  cat("\nGrupo:", g, "\n")
+  print(mvnormtest::mshapiro.test(X))
+}
+```
+
+Como complemento, la prueba de Shapiro-Wilk univariada para cada predictora:
+
+```{r}
+round(sapply(train[vars], function(x) shapiro.test(x)$p.value), 6)
+```
+
+En los tres grupos el p-valor de la prueba multivariada es menor a 0.001, por lo que se rechaza $H_0$: los datos no siguen una distribución normal multivariante. En las pruebas univariadas solo `log_sqft_living` no rechaza la normalidad (p = 0.20). Aunque la transformación logarítmica redujo la asimetría, `log_sqft_lot` conserva colas pesadas y `bathrooms`, `bedrooms` y `yr_built` son variables discretas, por lo que no pueden ser exactamente normales.
+
+## Homocedasticidad
+
+Hipótesis: $H_0$: las matrices de varianzas y covarianzas son iguales en todos los grupos; $H_1$: al menos una es distinta. Se usa la prueba M de Box con un nivel de significancia de 0.05.
+
+```{r}
+biotools::boxM(train[vars], train$grupo)
+```
+
+La prueba M de Box da $\chi^2 = 133.79$ con 42 grados de libertad y un p-valor de $1.66\times10^{-11}$, menor a 0.05, por lo que se rechaza $H_0$: las matrices de varianzas y covarianzas no son homogéneas entre grupos. Hay que considerar que esta prueba es muy sensible a la falta de normalidad, que ya se detectó en el punto anterior.
+
+# Conclusión
+
+Se construyó un modelo de análisis discriminante lineal para clasificar la calidad de construcción de las viviendas (`grade` agrupada en Baja, Media y Alta) a partir de seis variables numéricas, usando una muestra estratificada de 300 casas. Las variables que mejor discriminan son el precio y la superficie habitable, seguidas del número de baños, y la primera función discriminante concentra el 95.80% de la separación entre grupos. El modelo tiene un error de 24.44% en el conjunto de prueba, frente a 47.78% de la regla de asignar siempre la clase mayoritaria, y casi todos sus errores ocurren entre clases vecinas, por lo que es útil para pronosticar. Sin embargo, no se cumplen los supuestos de normalidad multivariante ni de homogeneidad de covarianzas, así que las probabilidades posteriores del modelo deben interpretarse con cautela. Para mejorar el análisis se podría probar un análisis discriminante cuadrático (`qda`), que no requiere covarianzas iguales, o usar una muestra más grande.

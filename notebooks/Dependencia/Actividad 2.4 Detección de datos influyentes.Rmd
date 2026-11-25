@@ -1,0 +1,262 @@
+---
+title: "Actividad 2.4"
+author: "Hugo André Meza Fierros"
+date: "2026-11-20"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(car)       # avPlots, influencePlot, vif
+library(lmtest)    # bptest, dwtest, resettest
+library(ggplot2)
+```
+
+# Actividad 2.4 Detección de datos influyentes
+
+```{r}
+M <- read.csv("../../data/datosRes-1.csv")
+names(M) <- c("Resistencia", "Longitud", "AlturaMatriz", "AlturaPoste", "AlturaAmarre")
+n <- nrow(M)
+str(M)
+round(cor(M), 3)
+```
+
+Se tienen $n = 25$ observaciones. La variable dependiente es la resistencia y las predictoras son la longitud, la altura de la matriz, la altura del poste y la altura del amarre. La resistencia tiene una correlación muy alta con la longitud (0.982) y alta con la altura del poste (0.836) y del amarre (0.748). Las predictoras también están correlacionadas entre sí (altura del poste con longitud 0.795 y con altura del amarre 0.779), lo que anticipa que alguna podría ser redundante.
+
+```{r}
+modelo_completo <- lm(Resistencia ~ ., data = M)
+modelo_nulo <- lm(Resistencia ~ 1, data = M)
+summary(modelo_completo)
+summary(modelo_nulo)
+```
+
+El modelo completo la altura del poste no es significativa (p = 0.452), mientras que las otras tres predictoras sí lo son.
+
+# 1. Selección de variables por pasos
+
+## 1.1 Criterio AIC
+
+```{r}
+modelo_AIC <- step(modelo_nulo, 
+                           scope = list(lower = modelo_nulo, upper = modelo_completo))
+summary(modelo_AIC)
+```
+
+## 1.2 Criterio BIC
+
+```{r}
+modelo_BIC <- step(
+  modelo_nulo, 
+  scope = list(lower = modelo_nulo, upper = modelo_completo), 
+  k = log(nrow(M)) # k = log(n) para BIC
+)
+summary(modelo_BIC)
+```
+
+Ambos criterios llegan al mismo modelo. En el primer paso, eliminar la altura del poste reduce el AIC de 32.54 a 31.27 (y el BIC de 38.64 a 36.14), y en el segundo paso ni agregarla de nuevo ni quitar otra variable lo mejora. El modelo seleccionado es
+
+$$\widehat{\text{Resistencia}} = 1.3671 + 2.5349\,\text{Longitud} + 0.0085\,\text{AlturaMatriz} + 2.5993\,\text{AlturaAmarre}$$
+
+Las tres predictoras son significativas (p \< 0.002), el modelo explica el 98.96% de la variabilidad de la resistencia ($R^2_{adj} = 0.9881$, ligeramente mayor que el 0.9879 del modelo completo) y es globalmente significativo (F = 667, p \< 2.2e-16). La altura del poste se elimina porque su información ya está contenida en la longitud y la altura del amarre, con las que está fuertemente correlacionada.
+
+```{r}
+modelo <- modelo_BIC
+p <- length(coef(modelo)) - 1
+vif(modelo)
+```
+
+Los VIF son menores a 2.2, por lo que el modelo seleccionado no presenta problemas de multicolinealidad.
+
+# 2. Datos atípicos
+
+## 2.1 Residuos estandarizados
+
+```{r}
+r_std <- rstandard(modelo)
+which(abs(r_std) > 3)
+round(range(r_std), 4)
+```
+
+Ninguna observación supera $|r_i| > 3$; los residuos estandarizados van de -2.03 (observación 9) a 2.07 (observación 15)
+
+## 2.2 Residuos estudentizados (estandarización extrema)
+
+```{r}
+r_stu <- rstudent(modelo)
+which(abs(r_stu) > 3)
+round(range(r_stu), 4)
+outlierTest(modelo)
+```
+
+El residuo estudentizado estima $\hat\sigma_{(i)}$ sin la observación $i$, por lo que un atípico no infla la varianza con la que se evalúa. Ninguna observación supera $|t_i| > 3$; el mayor es el de la observación 15 (2.26), y la prueba de Bonferroni no lo considera atípico (p ajustado = 0.874). **No hay datos atípicos.**
+
+# 3. Datos influyentes
+
+## 3.1 Leverage
+
+```{r}
+hat <- hatvalues(modelo)
+lim_hat <- 2 * (p + 1) / n
+lim_hat
+which(hat > lim_hat)
+```
+
+El leverage promedio es $(p+1)/n = 4/25 = 0.16$ y el umbral es $2(p+1)/n = 0.32$. Solo la **observación 17** lo supera ($h = 0.423$): es la de mayor longitud (20) y altura de amarre (4), valores extremos dentro del rango de las predictoras. La observación 18 ($h = 0.307$) queda cerca del umbral.
+
+## 3.2 Distancia de Cook
+
+```{r}
+cooks <- cooks.distance(modelo)
+lim_cook <- 4 / n
+which(cooks > lim_cook)
+which(cooks > 1)
+
+plot(cooks, type = "h", main = "Distancia de Cook", ylab = expression(D[i]), xlab = "Observación")
+abline(h = lim_cook, col = "red", lty = 2)
+text(which(cooks > lim_cook), cooks[cooks > lim_cook], which(cooks > lim_cook), pos = 3, cex = 0.8)
+```
+
+Con el criterio $D_i > 4/n = 0.16$, las **observaciones 9, 11, 15 y 17** son influyentes ($D$ = 0.160, 0.179, 0.282 y 0.213). Ninguna supera $D_i > 1$, por lo que bajo el criterio clásico ninguna tiene una influencia severa. Las observaciones 9, 11 y 15 son influyentes por tener los residuos más grandes (alrededor de $\pm 3.2$ unidades), y la 17 por su leverage alto.
+
+# 4. Resumen de resultados
+
+```{r}
+tabla <- data.frame(residuals = round(residuals(modelo), 4),
+                    rstandard = round(r_std, 4),
+                    rstudent = round(r_stu, 4),
+                    hat = round(hat, 4),
+                    cooks = round(cooks, 4))
+tabla$atipico <- abs(tabla$rstudent) > 3
+tabla$leverage_alto <- tabla$hat > lim_hat
+tabla$influyente <- tabla$cooks > lim_cook
+tabla
+```
+
+```{r}
+tabla[tabla$atipico | tabla$leverage_alto | tabla$influyente, ]
+```
+
+No hay atípicos; la observación 17 tiene leverage alto y es influyente; las observaciones 9, 11 y 15 son influyentes por su residuo, sin leverage alto.
+
+# 5. Gráficos complementarios
+
+## 5.1 Gráficos de variable agregada
+
+```{r}
+avPlots(modelo, layout = c(1, 3))
+```
+
+Cada panel grafica el residuo de la resistencia regresada contra las demás predictoras frente al residuo de la predictora correspondiente regresada contra las demás. La pendiente de la recta es el coeficiente de esa variable en el modelo. La longitud muestra una relación lineal muy fuerte y con poca dispersión, lo que confirma que es la variable que más explica la resistencia. La altura de la matriz y la del amarre muestran una relación positiva más débil pero clara, consistente con su significancia. En los paneles se etiquetan las observaciones 9 y 15, que son las más alejadas de la recta en sentido vertical (residuos más grandes), y las observaciones 17, 18, 19 y 21, que están en los extremos del eje horizontal. En el panel de la altura del amarre, la 17 y la 18 quedan en el extremo derecho, por lo que tienen peso sobre la pendiente de esa variable.
+
+## 5.2 Residuos estudentizados absolutos
+
+```{r}
+ggplot(data = M, aes(x = predict(modelo), y = abs(r_stu))) +
+  geom_hline(yintercept = 3, color = "grey", linetype = "dashed") +
+  geom_point(aes(color = ifelse(abs(r_stu) > 3, "red", "black"))) +
+  geom_text(aes(label = 1:n), vjust = -0.7, size = 3) +
+  scale_color_identity() +
+  labs(title = "Distribución de los residuos studentized",
+       x = "predicción modelo", y = "|rstudent|") +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+```
+
+Todos los puntos están por debajo de la línea de 3, así que ninguno aparece en rojo y no hay observaciones con residuo estudentizado extremo. Los valores absolutos tampoco crecen con la predicción, lo que sugiere varianza constante.
+
+## 5.3 Gráfico de influencia
+
+```{r}
+influencePlot(modelo, id = TRUE)
+```
+
+El eje horizontal es el leverage, el vertical el residuo estudentizado y el área de cada círculo es proporcional a la distancia de Cook. El gráfico señala las observaciones 9, 15, 17 y 18. La 15 tiene el círculo más grande (mayor $D$) por combinar el residuo más grande con un leverage moderado; la 17 está a la derecha de la línea $2(p+1)/n$ con residuo pequeño; la 9 tiene residuo grande y leverage bajo; la 18 aparece por su leverage, pero su distancia de Cook (0.074) está por debajo de 4/n. Ninguna combina leverage alto con residuo grande, que sería el caso más preocupante.
+
+# 6. Ajustes al modelo
+
+Se ajusta el mismo modelo sin las observaciones influyentes por distancia de Cook (9, 11, 15 y 17).
+
+```{r}
+quitar <- which(cooks > lim_cook)
+quitar
+M2 <- M[-quitar, ]
+modelo2 <- lm(formula(modelo), data = M2)
+summary(modelo2)
+```
+
+```{r}
+cbind(con_todos = round(coef(modelo), 4), sin_influyentes = round(coef(modelo2), 4))
+```
+
+## 6.1 Supuestos de ambos modelos
+
+```{r}
+par(mfrow = c(2, 2)); plot(modelo, sub.caption = "Con todos los datos")
+```
+
+```{r}
+par(mfrow = c(2, 2)); plot(modelo2, sub.caption = "Sin influyentes")
+par(mfrow = c(1, 1))
+```
+
+```{r}
+supuestos <- function(m) {
+  c(normalidad_Shapiro = shapiro.test(residuals(m))$p.value,
+    homocedasticidad_BP = unname(bptest(m)$p.value),
+    independencia_DW = dwtest(m)$p.value,
+    linealidad_RESET = resettest(m)$p.value,
+    media_cero_t = t.test(residuals(m))$p.value)
+}
+round(cbind(con_todos = supuestos(modelo), sin_influyentes = supuestos(modelo2)), 4)
+```
+
+En todas las pruebas $H_0$ es que el supuesto se cumple, por lo que $p > 0.05$ indica que no hay evidencia de incumplimiento.
+
+## 6.2 Comparación de los modelos
+
+```{r}
+resumen <- function(m) {
+  s <- summary(m)
+  f <- s$fstatistic
+  c(n = nobs(m), R2 = s$r.squared, R2_adj = s$adj.r.squared,
+    p_valor_F = unname(pf(f[1], f[2], f[3], lower.tail = FALSE)),
+    sigma = s$sigma, AIC = AIC(m), BIC = BIC(m))
+}
+round(cbind(con_todos = resumen(modelo), sin_influyentes = resumen(modelo2)), 4)
+```
+
+```{r}
+which(cooks.distance(modelo2) > 4 / nobs(modelo2))   # índices dentro de M2
+```
+
+| Aspecto | Con todos los datos (n = 25) | Sin influyentes (n = 21) |
+|----|----|----|
+| $R^2$ / $R^2_{adj}$ | 0.9896 / 0.9881 | 0.9937 / 0.9925 |
+| $\hat\sigma$ | 1.738 | 1.262 |
+| p valor del modelo (F) | \< 2.2e-16 | \< 2.2e-16 |
+| Normalidad (Shapiro) | p = 0.950 | p = 0.650 |
+| Homocedasticidad (BP) | p = 0.410 | p = 0.879 |
+| Independencia (DW) | p = 0.181 | **p = 0.0048** |
+| Linealidad (RESET) | p = 0.140 | **p = 0.031** |
+| AIC / BIC | 104.22 / 110.31 | 74.94 / 80.17 |
+
+**Variabilidad explicada.** Sin las observaciones influyentes el $R^2_{adj}$ sube de 0.9881 a 0.9925 y el error estándar residual baja de 1.74 a 1.26. La mejora es pequeña porque el modelo original ya explicaba casi toda la variabilidad.
+
+**Significancia.** Ambos modelos son globalmente significativos (p \< 2.2e-16) y en ambos las tres predictoras son significativas. Los coeficientes de la longitud (2.53 a 2.57) y de la altura de la matriz (0.0085 a 0.0089) prácticamente no cambian; el de la altura del amarre baja de 2.60 a 1.81, que es el más sensible porque la observación 17 tiene el valor más alto de esta variable.
+
+**Supuestos.** El modelo con todos los datos cumple los cinco supuestos. Al eliminar las observaciones influyentes, la normalidad y la homocedasticidad se mantienen, pero se rechaza la independencia (Durbin-Watson, p = 0.0048) y la linealidad (RESET, p = 0.031). Además, en el modelo reducido aparecen nuevas observaciones influyentes (18 y 23), es decir, el problema no desaparece, solo se traslada a otros puntos.
+
+**AIC y BIC.** Son menores sin las influyentes, pero no son comparables entre modelos ajustados con distinto número de observaciones: con menos datos la verosimilitud cambia por construcción. Por eso la comparación se basa en $R^2_{adj}$, $\hat\sigma$, significancia y supuestos.
+
+# 7. Conclusiones
+
+La selección por pasos con AIC y con BIC coincide en eliminar la altura del poste y conservar la longitud, la altura de la matriz y la altura del amarre. La altura del poste no aporta información adicional porque está fuertemente correlacionada con las otras predictoras. El modelo final explica el 98.96% de la variabilidad de la resistencia, es significativo, no presenta multicolinealidad y cumple los supuestos de normalidad, homocedasticidad, independencia, linealidad y media cero de los residuos.
+
+En el contexto del problema, manteniendo constantes las demás variables, cada unidad adicional de longitud aumenta la resistencia esperada en 2.53 unidades, cada unidad de altura de la matriz en 0.0085 unidades y cada unidad de altura del amarre en 2.60 unidades. La longitud es el factor dominante, y las alturas de la matriz y del amarre aportan un efecto menor pero significativo.
+
+No se detectaron datos atípicos: ningún residuo estandarizado o estudentizado supera 3 en valor absoluto. Se identificaron cuatro observaciones influyentes según el criterio $D_i > 4/n$ (9, 11, 15 y 17), aunque ninguna supera $D_i > 1$. La observación 17 es la única con leverage alto, por tener los valores máximos de longitud y altura del amarre.
+
+Al retirar las observaciones influyentes, el ajuste mejora ligeramente, pero se pierde el cumplimiento de los supuestos de independencia y linealidad, cambia el coeficiente de la altura del amarre y surgen nuevos puntos influyentes. Como estas observaciones no son errores de medición sino casos válidos (en particular la 17 representa la región de valores altos de las predictoras), se recomienda **conservar el modelo con los 25 datos**: es más general, cumple todos los supuestos y la mejora que se obtiene al eliminar datos no justifica perder casi el 16% de la muestra.

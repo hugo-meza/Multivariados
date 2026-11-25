@@ -1,0 +1,98 @@
+---
+title: "Actividad 2.1"
+author: "Hugo Meza"
+date: "2026-11-06"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Actividad 2.1. Intervalos de Confianza
+
+```{r}
+# Cargamos las librerías necesarias
+library(tidyverse)
+#library(krulRutils)
+library(latex2exp)
+library(patchwork)
+```
+
+## 1. La porosidad al helio.
+
+La porosidad al helio (en porcentaje) de muestras de carbón, tomadas de cualquier veta en particular, está normalmente distribuida.  Supongamos que se toma una muestra al azar de 20 especímenes y que su promedio resulta de 4.85 con una desviación estándard muestral de 0.75. Calcule un intervalo de confianza al 95% para ***estimar el promedio poblacional de porosidad.***
+
+a.  *Muestra los límites del intervalo de confianza y el proceso seguido para estimar esos límites*
+
+    ```{r}
+    n <- 20
+    x_bar <- 4.85
+    s <- 0.75
+    alpha <- 0.05
+    ```
+
+    Como sabemos que los datos se distribuyen de forma nomal, pero su desviación estándar poblacional es desconocida y de que el tamaño de muestra es pequeño, utilizamos:
+
+    $$
+    \bar{X} \pm t_{1 - \alpha /2, n-1} \frac{s}{\sqrt{n}}
+    $$
+
+    ```{r}
+    t_alpha <- qt(alpha/2, df = n - 1, lower.tail = FALSE)
+
+    limite_inferior <- x_bar - t_alpha * s / sqrt(n)
+    limite_superior <- x_bar + t_alpha * s / sqrt(n)
+
+    # Mostrar los resultados
+    cat("Valor crítico t:", t_alpha, "\n")
+    cat("Intervalo de Confianza al 95%: [", limite_inferior, ",", limite_superior, "]\n")
+    ```
+
+b.  *Interpreta el resultado con palabras del resultado obtenido anteriormente*
+
+    Con un nivel de confianza del 95%, podemos afirmar que el promedio poblacional de la porosidad al helio de las muestras de carbón de esta veta se encuentra entre 4.50% y 5.20%. Esto significa que si tomáramos 100 muestras aleatorias diferentes del mismo tamaño y calculáramos un intervalo para cada una, esperaríamos que 95 de esos intervalos contengan el promedio real de porosidad de toda la veta.
+
+c.  *En base a estudios anteriores, se creía que el promedio poblacional era de 5.8, ¿hay evidencia que sugiera que es probable que ya cambió este promedio?*
+
+    Sí, hay evidencia estadística sólida que sugiere que el promedio poblacional ya cambió. El valor histórico de 5.8% cae completamente fuera (por encima) del intervalo de confianza calculado de [4.50%, 5.20%]. Al no estar contenido dentro del rango de valores al 95% de confianza, podemos concluir que es muy improbable que el promedio actual de la veta siga siendo 5.8%. Los datos actuales indican que la porosidad promedio ha disminuido significativamente.
+
+## 2. Las tarjetas de circuitos
+
+Se seleccionó una muestra de 25 piezas de material laminado utilizado en la fabricación de tarjetas de circuitos y se determinó que la cantidad de deformación promedio de la muestra es de 0.0635, con una desviación estándar muestral de 0.0065. Asumiendo que esta población se distribuye normalmente, calcule el intervalo de confianza ***para estimar la deformación promedio poblacional*** a un nivel de confianza del 95%
+
+a.  *Muestra los límites del intervalo de confianza y el proceso seguido para estimar esos límites*
+
+    ```{r}
+    n <- 25
+    x_bar <- 0.0635
+    s <- 0.0065
+    alpha <- 0.05
+    ```
+
+    Como sabemos que los datos se distribuyen de forma nomal, pero su desviación estándar poblacional es desconocida y de que el tamaño de muestra es pequeño, utilizamos:
+
+    $$
+    \bar{X} \pm t_{1 - \alpha /2, n-1} \frac{s}{\sqrt{n}}
+    $$
+
+    ```{r}
+    t_alpha <- qt(1 - alpha/2, df = n - 1)
+
+    limite_inferior <- x_bar - t_alpha * (s / sqrt(n))
+    limite_superior <- x_bar + t_alpha * (s / sqrt(n))
+
+    # Mostrar los resultados
+    cat("Valor crítico t:", t_alpha, "\n")
+    cat("Intervalo de Confianza al 95%: [", limite_inferior, ",", limite_superior, "]\n")
+    ```
+
+b.  *Interpreta el resultado con palabras del resultado obtenido anteriormente*
+
+    Con un nivel de confianza del 95%, podemos afirmar que el promedio poblacional de la deformación de tarjetas de circuitos de material laminado se encuentra entre 0.0608 y 0.0662. Esto significa que si tomáramos 100 muestras aleatorias diferentes del mismo tamaño y calculáramos un intervalo para cada una, esperaríamos que 95 de esos intervalos contengan el promedio real de deformación de la producción.
+
+c.  *En base a estudios anteriores, se creía que el promedio poblacional de la deformación era de 0.065, ¿hay evidencia que sugiera que es probable que ya cambió?*
+
+    No, no hay evidencia estadística suficiente que sugiera que el promedio poblacional ya cambió.
+
+    El valor histórico de 0.065 cae completamente dentro del intervalo de confianza calculado de [0.0608, 0.0662]. Al estar contenido en el rango de valores al 95% de confianza, no podemos descartar la posibilidad de que el promedio real siga siendo el mismo. Por lo tanto, los datos de esta muestra indican que la cantidad de deformación promedio actual no es significativamente distinta al valor histórico de 0.065.

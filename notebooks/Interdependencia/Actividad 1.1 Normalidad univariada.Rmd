@@ -1,0 +1,281 @@
+---
+title: "Actividad 1.1 Normalidad univariada"
+author: "Hugo Meza"
+date: "2026-11-03"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 7, fig.height = 4.5)
+library(moments)
+library(nortest)
+library(e1071)
+```
+
+# Sesgo y curtosis en la Normalidad y fuera de ella
+
+## 1. Dentro de la Normalidad
+
+### A. Normalidad teórica
+
+```{r normal-teorica}
+Pob_normal = dnorm(-400:400, 0, 100)
+plot(-400:400, Pob_normal, type="l", main = "Distribución Normal media=0, sigma=100")
+```
+
+### B. Generación de Datos Aleatorios e Histograma
+
+```{r}
+set.seed(123)
+x1=rnorm(150,0,100)
+hist(x1, col=0, main = "Distribución empírica de Normal media=0, sigma=100", freq=FALSE)
+```
+
+### C. Calculando sesgo y curtosis
+
+```{r}
+sg1 = skewness(x1)
+k1 = kurtosis(x1)
+
+cat("Sesgo (Skewness):", sg1, "\n")
+cat("Curtosis:", k1, "\n")
+```
+
+### D. Analizando la normalidad de los datos generados
+
+```{r}
+# Prueba de Jarque-Bera
+jarque.test(x1)
+
+# QQ-plot
+qqnorm(x1, main = "QQ-Plot de datos Normales")
+qqline(x1, col = "red")
+```
+
+## E. Interpretación
+
+La principal diferencia entre el gráfico de la sección A y el de la sección B radica en que la sección A al ser la distribución Normal teórica presenta una naturaleza de curva suave en todos los puntos; mientras que en la sección B vemos un histograma con intervalos definidos, por lo que no es una curva. Por otra parte se puede notar como el histograma de la sección B presenta una tendencia a converger o a tener una forma parecida a la Normal Teórica.
+
+Esto se puede argumentar con los valores conseguidos en las secciones C y D, debido a que el valor de curtosis es cercano a cero. Al respecto, es necesario mencionar que la librería utilizada en R calcula el coeficiente de curtosis centrada en cero (exceso de curtosis). Esto indica que los datos generados en la sección B siguen una distribución aproximadamente normal; aunque el valor de sesgo no está tan cercano a cero como la curtosis, es suficiente para notar este comportamiento. Aunado a esto, el p-valor obtenido en la prueba de Jarque-Bera es de 0.5567, lo que aporta suficiente evidencia estadística para no rechazar la hipótesis nula de normalidad (es mayor a 0.05). Por último, el QQ-plot generado muestra que los puntos tienden a alinearse sobre la recta de referencia, lo que reafirma lo planteado anteriormente, pero se llega a notar un comportamiento distinto en las colas del QQ-plot, lo que podría explicarse al analizar el impacto de los dos momentos calculados.
+
+# 2. Fuera de la Normalidad
+
+Para esta sección se tomarán 3 dsitribuciones no normales con diferentes características:
+
+- **Muy sesgada a la derecha** (Exponencial, rate = 0.1)
+
+- **Ligeramente sesgada a la derecha** (Gamma=, shape = 5)
+
+- **Sesgada a la izquierda** (Weibull, shape=8, scale=10)
+
+## Distribución 1: Muy sesgada a la derecha
+
+```{r no-normal-1}
+pob_exp = dexp(0:60, rate = 0.1)
+plot(0:60, pob_exp, type="l", main = "Distribución exponencial con rate=0.1")
+
+set.seed(123)
+d1 = rexp(150, rate = 0.1)
+
+# Histograma
+hist(d1, freq = FALSE, col = "coral", main = "Muy Sesgada a la Derecha (Exponencial rate = 0.1)")
+
+# Descriptivos
+cat("Sesgo:", skewness(d1), "| Curtosis:", kurtosis(d1), "\n")
+
+# Pruebas y QQ-Plot
+jarque.test(d1)
+qqnorm(d1, main = "QQ-Plot - Muy Sesgada a la Derecha")
+qqline(d1, col = "red")
+```
+
+## Distribución 2: Ligeramente sesgada a la derecha
+
+```{r no-normal-2}
+pob_gamma = dgamma(0:25, shape = 5, scale = 1)
+plot(0:25, pob_gamma, type="l", main = "Distribución Gamma con shape = 5")
+
+set.seed(123)
+d2 = rgamma(150, shape = 5, scale = 1)
+
+# Histograma
+hist(d2, freq = FALSE, col = "coral", main = "Ligeramente Sesgada a la Derecha (Gamma shape = 5)")
+
+# Descriptivos
+cat("Sesgo:", skewness(d2), "| Curtosis:", kurtosis(d2), "\n")
+
+# Pruebas y QQ-Plot
+jarque.test(d2)
+qqnorm(d2, main = "QQ-Plot - Ligeramente Sesgada a la Derecha")
+qqline(d2, col = "red")
+```
+
+## Distribución 3: Sesgada a la izquierda
+
+```{r no-normal-3}
+pob_weibull = dweibull(0:15, shape = 8, scale = 10)
+plot(0:15, pob_weibull, type="l", main = "Distribución Weibull con shape=8 y scale=10")
+
+set.seed(123)
+d3 = rweibull(150, shape = 8, scale = 10)
+
+# Histograma
+hist(d3, freq = FALSE, col = "coral", main = "Sesgada a la Izquieda (Weibull shape=8, scale=10)")
+
+# Descriptivos
+cat("Sesgo:", skewness(d3), "| Curtosis:", kurtosis(d3), "\n")
+
+# Pruebas y QQ-Plot
+jarque.test(d3)
+qqnorm(d3, main = "QQ-Plot - Sesgada a la Izquierda")
+qqline(d3, col = "red")
+```
+
+## Conclusión
+
+- **Sesgo y Curtosis vs. QQ-Plot:** Es muy notorio el peso que tiene el sesgo y curtosis dentro del QQ-plot. En la presencia de un sesgo positivo (sesgo a la derecha) los datos presentan una curvatura hacia arriba. La cola derecha se dispara verticalmente por encima de la recta teórica debido a la presencia de valores atípicos elevados, mientras que la cola izquierda cae por encima de la línea en valores bajos debido al comportamiento de la distribución exponencial. En un sesgo negativo (sesgado a la izquierda) la curva adopta una forma hacia abajo, donde los valores de la cola izquierda se caen por debajo de la recta teórica y la cola derecha queda acotada inferiormente respecto al modelo normal. Cuando la curtosis es elevada y positiva (leptocúrtica) se nota que los extremos se alejan drásticamente de la recta.
+
+- **Relación con Jarque-Bera:** Esta prueba utiliza los valores del sesgo y curtosis en una prueba de hipótesis si la distribución es Normal o se aproxima. Cuando los valores de los momentos explotan en magnitudes grandes se puede observar cómo el p-valor cae por debajo del límite 0.05 (como es el caso de la distribución muy sesgada a la derecha), por lo que la hipótesis nula de normalidad se rechaza. Por otra parte, podemos observar que mientras estos momentos se acercan a 0 (recordemos que en R la curtosis está centrada en 0 por default), el p-valor empieza a incrementar en valores más cercanos a 0.05, pero no lo suficiente como para aceptar la hipótesis de normalidad. Con esto podemos darnos una visualización de la relación entre el sesgo y curtosis con esta prueba.
+
+# 3. Probando normalidad en una base de datos
+
+```{r dataset-cars}
+data(cars)
+speed <- cars$speed
+dist  <- cars$dist
+```
+
+## A. Pruebas de Normalidad Univariada
+
+```{r}
+# Shapiro Wilk
+shapiro.test(speed)
+shapiro.test(dist)
+
+# Anderson Darling
+ad.test(speed)
+ad.test(dist)
+
+# Jarque-Bera
+jarque.test(speed)
+jarque.test(dist)
+
+# Kolmogorov-Smirnov (Lilliefors)
+lillie.test(speed)
+lillie.test(dist)
+
+
+```
+
+Los resultados de las pruebas de normalidad muestran un comportamiento contrastante entre ambas variables.
+
+En primera instancia, la variable de `speed` en todas las pruebas de hipótesis aplicadas se obtienen p-valores holgadamente superiores al nivel de significancia de $\alpha = 0.05$. Con esto se concluye que no existe suficiente evidencia estadística para rechazar la hipótesis nula de normalidad, sugiriendo que la velocidad de los automóviles sigue una distribución normal.
+
+Por otro lado la variable `dist` (distancia) presenta resultados contradictorios según la prueba empleada. Las pruebas de Jarque-Bera ($p = 0.07315$) y Anderson-Darling ($p = 0.05021$) arrojan p-valores por encima de $0.05$ (aunque este último en el límite de decisión), bajo los cuales no se rechazaría la normalidad. Sin embargo, pruebas como Shapiro-Wilk ($p = 0.03910$) y Kolmogorov-Smirnov/Lilliefors ($p = 0.04335$) obtienen p-valores inferiores a $0.05$, indicando evidencia suficiente para rechazar la hipótesis nula de normalidad.
+
+Esta discrepancia entre pruebas pone en evidencia que los test de hipótesis por sí solos pueden ser sensibles al tamaño de la muestra o a la presencia de asimetrías específicas. Por ello, resulta indispensable complementar la decisión analítica con el estudio del sesgo, la curtosis y herramientas visuales (QQ-plots e histogramas).
+
+## B. QQ-plots
+
+```{r}
+qqnorm(speed, main = "QQ-Plot: Speed")
+qqline(speed, col = "blue")
+
+qqnorm(dist, main = "QQ-Plot: Distance")
+qqline(dist, col = "red")
+```
+
+En este caso el QQ-plot de `speed` parece mantenerse constante con la recta teórica planteada. Esto ayuda a respaldar las pruebas de normalidad realizadas en la sección anterior. Cabe destacar que pueden verse algunos comportamientos en la cola derecha, donde empiezan a alejarse un poco más sobre esta recta en comparación de los cuantiles centrales.
+
+Por otra parte, el QQ-plot de la variable `dist`(distancia) exhibe un comportamiento claramente distinto. Se aprecia cómo los datos se desvían respecto a la recta de referencia, lo cual anticipa la presencia de un sesgo positivo y una curtosis alejada de los parámetros normales esperados (sesgo $\neq 0$ y curtosis centrada en 0 $\neq 0$). En los cuantiles centrales, los puntos muestran una ligera curvatura, mientras que en la cola derecha se disparan por encima de la recta teórica, evidenciando la presencia de valores atípicos superiores y confirmando la asimetría observada en las pruebas de Lilliefors.
+
+## C. Coeficientes de Sesgo y Curtosis
+
+```{r}
+# Medidas para speed
+sk_speed <- skewness(speed)
+kt_speed <- kurtosis(speed)
+
+# Medidas para dist
+sk_dist <- skewness(dist)
+kt_dist <- kurtosis(dist)
+
+cat("Speed - Sesgo:", sk_speed, "| Curtosis:", kt_speed, "\n")
+cat("Dist - Sesgo:", sk_dist, "| Curtosis:", kt_dist, "\n")
+```
+
+Estos coeficientes nos ayudan a describir las desviaciones presentadas en los gráficos.
+
+La variable `speed` presenta un coeficiente de sesgo cercano a 0, lo que confirma una distribución prácticamente simétrica con una ligera inclinación hacia la izquierda. Su curtosis negativa indica una forma levemente platicúrtica. Estas desviaciones son mínimas, lo que explica por qué el QQ-plot se mantiene tan alineado y por qué todas las pruebas de hipótesis concluyen en no rechazar la normalidad.
+
+En la variable `dist` se muestra un sesgo positivo moderado ($\text{Sesgo} > 0.5$), lo que cuantifica matemáticamente la asimetría a la derecha apreciada en el QQ-plot y en las pruebas de Kolmogorov-Smirnov. Esta asimetría refleja que, conforme la velocidad aumenta, las distancias crecen de forma no lineal generando valores atípicos hacia la cola superior. Su valor de curtosis en exceso es levemente positivo ($0.119$), lo que confirma que el alejamiento principal de la normalidad proviene del sesgo y no de una concentración anómala en las colas.
+
+## D. Comparación de Medidas de Tendencia Central
+
+```{r}
+midrange <- function(x) (max(x) + min(x)) / 2
+
+summary_table <- data.frame(
+  Variable = c("Speed", "Distance"),
+  Media = c(mean(speed), mean(dist)),
+  Mediana = c(median(speed), median(dist)),
+  Rango_Medio = c(midrange(speed), midrange(dist))
+)
+
+knitr::kable(summary_table, caption = "Comparación de Medidas de Tendencia Central")
+```
+
+El análisis comparativo entre la media, la mediana y el rango medio permite evaluar la simetría y el impacto de los valores extremos en cada variable
+
+En la variable `speed` existe una alta convergencia entre las tres medidas de tendencia central. La cercanía entre la media ($15.40$) y la mediana ($15.00$) confirma la elevada simetría de la distribución de velocidades. El rango medio ($14.50$) no se aleja significativamente del centro de los datos, lo que reafirma la ausencia de valores atípicos severos que distorsionen el promedio y respalda las conclusiones de normalidad obtenidas previamente.
+
+Por otra parte, la variable `dist` muestra una discrepancia notable entre sus medidas centrales. La media ($42.98$) se encuentra desplazada a la derecha de la mediana ($36.00$), una señal inequívoca de sesgo positivo (asimetría a la derecha). Además, el rango medio ($61.00$) se dispara muy por encima de la media y la mediana debido a la presencia de observaciones con distancias considerablemente elevadas en el extremo superior. Esta discrepancia evidencia la alta sensibilidad de la media y del rango medio a los valores atípicos de la cola derecha.
+
+## E. Diagramas de Boxplot
+
+```{r}
+boxplot(speed, main = "Boxplot: Speed", col = 0)
+boxplot(dist, main = "Boxplot: Distance", col = 0)
+```
+
+El análisis visual mediante boxplots confirma la estructura de distribución de ambas variables y el impacto de sus valores extremos.
+
+La variable `speed` muestra una estructura altamente simétrica. La línea gruesa de la mediana se ubica casi en el centro del rango intercuartílico. Asimismo, la longitud del bigote inferior y la del bigote superior son de proporciones muy similares. Destaca la ausencia total de valores atípicos (outliers) fuera de los límites de los bigotes, lo que apoya los resultados previos de normalidad y el coeficiente de sesgo cercano a cero.
+
+En el otro caso, la variable `dist` presenta claros indicios de asimetría a la derecha (sesgo positivo). La mediana está claramente desplazada hacia la parte inferior de la caja, haciendo que el espacio entre el primer cuartil y la mediana sea más corto que el tramo hacia el tercer cuartil. Además, el bigote superior se extiende un poco más que el inferior y se observa la presencia de un valor atípico (outlier) superior situado en $120\text{ ft}$. Esta observación atípica jala la media y el rango medio hacia arriba, explicando por qué la prueba de Lilliefors tienden a rechazar la hipótesis de normalidad para esta variable.
+
+## F. Histogramas con Densidad Empírica y Curva Normal Teórica
+
+```{r}
+# Speed
+hist(speed, freq = FALSE, main = "Histograma de Speed")
+lines(density(speed), col = "red", lwd = 2)
+curve(dnorm(x, mean = mean(speed), sd = sd(speed)), 
+      from = min(speed), to = max(speed), add = TRUE, col = "blue", lwd = 2, lty = 2)
+legend("topleft", legend = c("Empírica", "Teórica Normal"), col = c("red", "blue"), lty = 1:2, cex = 0.8)
+
+# Distance
+hist(dist, freq = FALSE, main = "Histograma de Distance")
+lines(density(dist), col = "red", lwd = 2)
+curve(dnorm(x, mean = mean(dist), sd = sd(dist)), 
+      from = min(dist), to = max(dist), add = TRUE, col = "blue", lwd = 2, lty = 2)
+legend("topleft", legend = c("Empírica", "Teórica Normal"), col = c("red", "blue"), lty = 1:2, cex = 0.8)
+```
+
+Con estas gráficas es posible tener información más certera sobre la distribución y naturaleza que siguen las variables analizadas.
+
+La variable `speed` presenta una densidad empírica (línea roja) que se ajusta de manera notable a la curva normal teórica de Campana de Gauss (línea azul punteada). Aunque se percibe un centro ligeramente aplanado (reflejando la curtosis negativa de $-0.673$), la masa de datos se distribuye de forma simétrica alrededor del promedio de $15.40\text{ mph}$. Ambas curvas decaen casi de forma idéntica hacia los extremos, lo que confirma visualmente el cumplimiento del supuesto de normalidad.
+
+En su parte, la variable `dist` exhibe un desfase claro entre la distribución empírica y la campana normal teórica. El pico máximo de la densidad empírica (línea roja) se desplaza hacia la izquierda (alrededor del intervalo de $20$ a $40\text{ ft}$) y desciende más rápido de lo esperado en la zona central. Posteriormente, la curva empírica se extiende suavemente hacia la derecha abarcando valores superiores a $100\text{ ft}$. Esta cola alargada confirma la asimetría positiva de $0.759$ provocada por las distancias.
+
+## Conclusión
+
+Tras integrar los métodos analíticos, métricas descriptivas y representaciones gráficas sobre la base de datos `cars`:
+
+1.  **`speed` (Velocidad):** Se concluye que sigue una distribución normal. Las pruebas de hipótesis aplicadas (Shapiro-Wilk, Anderson-Darling, Jarque-Bera y Lilliefors) obtuvieron p-valores $p > 0.05$, respaldadas por una media y mediana prácticamente idénticas ($15.40$ vs. $15.00$), un QQ-plot lineal constante, un boxplot sin valores atípicos y un histograma con excelente superposición respecto a la densidad
+
+2.  **`dist` (Distancia):** Se concluye que no sigue una distribución normal estricta. Presenta un sesgo positivo moderado ($\text{Sesgo} = 0.759$) impulsado por la presencia de valores atípicos superiores. Este comportamiento provoca que la media ($42.98$) sobrepase a la mediana ($36.00$), distorsionando el rango medio ($61.00$) y llevando a pruebas como Shapiro-Wilk ($p = 0.03910$) y Lilliefors ($p = 0.04335$) a rechazar la hipótesis nula de normalidad.
+
+# Declaratoria de uso de IA durante el desarrollo de trabajo
+
+No se utilizó IA. Declaro que durante la elaboración de esta actividad de aprendizaje para evaluar no utilicé herramientas de Inteligencia Artificial generativa.

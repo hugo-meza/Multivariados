@@ -1,0 +1,231 @@
+---
+title: "Actividad 1.3"
+author: "Hugo Meza"
+date: "2026-11-06"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Actividad 1.3 Matrices y Estadística
+
+## Problema 1
+
+Dadas las matrices A y B:
+
+$$
+A = \begin{bmatrix}
+2 & 4 & -3 \\
+0 & -2 & 5 \\
+9 & 0 & 6
+\end{bmatrix} \\
+\\
+B = \begin{bmatrix}
+-8 & 6 & -2 \\
+-7 & 9 & -5 \\
+-3 & 5 & 1
+\end{bmatrix}
+$$
+
+```{r}
+A <- matrix(c(2, 4, -3,
+                0, -2, 5,
+              9, 0, 6), ncol = 3, byrow = TRUE)
+B <- matrix(c(8, 6, -2,
+              -7, 9, -5,
+              -3, 5, 1), ncol = 3, byrow = TRUE)
+```
+
+Calcula:
+
+- $A + B$
+
+```{r}
+A + B
+```
+
+- $4A + 3B$
+
+```{r}
+4 * A + 3 *B
+```
+
+- $A'$
+
+```{r}
+t(A)
+```
+
+- $A^{-1}$
+
+```{r}
+solve(A)
+```
+
+- Determinante $A$ y $A'$
+
+```{r}
+det(A)
+det(t(A))
+```
+
+## Problema 2
+
+Dadas las matrices A y B, calcula AB:
+
+$$ A = 
+\begin{bmatrix}
+2 & 1 & 3 & -3 \\
+3 & 0 & -2 & -1 \\
+4 & 5 & 0 & -5
+\end{bmatrix}
+\\
+\\
+B = \begin{bmatrix}
+4 & 2 \\
+-3 & 1 \\
+5 & -2 \\
+8 & 0
+\end{bmatrix}
+$$
+
+```{r}
+A <- matrix(c(2, 1, 3, -3,
+              3, 0, -2, -1, 
+              4, 5, 0, -5), ncol = 4, byrow = TRUE)
+
+B <- matrix(c(4, 2,
+              -3, 1, 
+              5, -2, 
+              8, 0), ncol = 2, byrow = TRUE)
+```
+
+```{r}
+A %*% B
+```
+
+## Problema 3
+
+Baja el archivo del menú MacDonald. Explora las variables y selecciona 4 variables cuantitativas:
+
+- Calorias (Calories)
+
+- Proteinas (Protein)
+
+- Carbohidratos (Carbohydrates)
+
+- Azúcares (Sugars)
+
+```{r}
+data <- read.csv("../../data/mc-donalds-menu.csv")
+data
+X <- data[, c("Calories", "Protein", "Carbohydrates", "Sugars")]
+X
+```
+
+**Calcula**:
+
+a\. El vector de Medias
+
+Utilizamos la forma matricial para obtener el vector de medias:
+
+$$
+\bar{X} = X'1 \frac{1}{n}
+$$
+
+donde:
+
+- $X'$ representa la transpuesta de la matriz de datos de $p \ x \ n$.
+
+- $1$ un vector de 1's de $n \ x \ 1$.
+
+El resultado nos queda una matriz de tamaño $p \ x \ 1$.
+
+```{r}
+n  <- length(X$Calories)
+v1 <- rep(1, n)
+
+X_bar <- t(X) %*% v1 * (1/n)
+X_bar
+
+```
+
+b\. La matriz de Varianzas y Covarianzas
+
+Utilizamos la forma matricial para calcular la matriz:
+
+$$
+S = \frac{1}{n} (X - \bar{X})'(X - \bar{X})
+$$
+
+donde:
+
+- $X$ es la matriz de datos de $n \ x \ p$.
+
+- $\bar{X}$ es la una matriz compuesta de la media calculada previamente, calculada: $\bar{X} = 1\bar{X'}$.
+
+  - Con $1$ como un vector de 1's de tamaño $n \ x \ 1$
+
+De esta forma se cumplen que el tamaño de ambas matrices son iguales para realizar la resta por elemento.
+
+```{r}
+X <- as.matrix(X)
+X_bar_mtrx <- v1 %*% t(X_bar)
+S <- (1 / n) * t(X - X_bar_mtrx) %*% (X - X_bar_mtrx)
+S
+```
+
+c\. La matriz de correlación
+
+Utilizamos la forma matricial:
+
+$$
+R = (V^{1/2})^{-1} \ S \ (V^{1/2})^{-1}
+$$
+
+donde:
+
+- $V$ es una matriz con la diagonal de varianzas de $S$, calculada con el producto Hadamard (multiplicación punto a punto): $V = S \ \circ \ I$.
+
+- $V ^{1/2}$ es la matriz diagonal de las desviaciones estandar.
+
+```{r}
+# Usamos producto Hadamard (elemento a elemento) para obtener la diagonal de la matriz de varianza-covarianza 
+V <- S * diag(nrow(S))
+V <-sqrt(V)
+R <- solve(V) %*% S %*% solve(V)
+
+R
+```
+
+d\. Valores y vectores propios a partir de la matriz de covarianzas y de la de correlación.
+
+```{r}
+ev_S <- eigen(S)
+valores_propios_S <- ev_S$values       
+vectores_propios_S <- ev_S$vectors     
+
+cat("Matriz de Covarianza S\n")
+cat("Valores propios:\n")
+valores_propios_S
+cat("Vectores propios:\n")
+vectores_propios_S
+
+cat("\n")
+ev_R <- eigen(R)
+valores_propios_R <- ev_R$values
+vectores_propios_R <- ev_R$vectors
+
+cat("Matriz de Correlación R\n")
+cat("Valores propios:\n")
+valores_propios_R
+cat("Vectores propios:\n")
+vectores_propios_R
+
+```
+
+# Declaratoria de uso de IA durante el desarrollo de trabajo
+
+No se utilizó IA. Declaro que durante la elaboración de esta actividad de aprendizaje para evaluar no utilicé herramientas de Inteligencia Artificial generativa.

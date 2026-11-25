@@ -1,0 +1,264 @@
+---
+title: "Actividad 2.2"
+author: "Hugo Meza"
+date: "2026-11-08"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# Actividad 2.2. Intervalos de confianza y de predicción
+
+## Problema 1
+
+Supongamos que tenemos el siguiente conjunto de datos:
+
+$$
+x = (1, 2, 3, 4, 5)
+$$
+
+y
+
+$$
+y = (1.64, 2.3, 3.68, 4.69, 3.89)
+$$
+
+Construya los intervalos de confianza para $\hat{\beta_0}$ y $\hat{\beta_1}$ con un nivel de significancia de $\alpha = 0.05$ utilizando el método de mínimos cuadrados y construya las bandas de significancia y predicción para un valor de $x_0$ arbitrario.
+
+Para este caso, utilizaremos la forma matricial de intervalos de confianza, bandas de confianza y predicción:
+
+```{r}
+x <- c(1, 2, 3, 4, 5)
+y <- c(1.64, 2.3, 3.68, 4.69, 3.89)
+n <- length(x)
+alpha <- 0.05
+gl <- n - 2
+t_critico <- qt(1 - alpha/2, gl)
+
+# Definir la matriz de diseño Phi y el vector Yphi <- cbind(1, x)
+phi <- cbind(1,x)
+Y <- matrix(y, ncol = 1)
+
+D <- solve(t(phi) %*% phi) # D^2 = (Phi^T Phi)^{-1} en la notación de clase
+A <- D %*% t(phi)
+H <- phi %*% A
+
+beta_hat <- A %*% Y
+colnames(beta_hat) <- "Estimación"
+rownames(beta_hat) <- c("beta_0", "beta_1")
+
+Y_hat <- H %*% Y
+sse <- sum((Y - Y_hat)^2)
+
+cat("--- COEFICIENTES CALCULADOS ---\n")
+print(beta_hat)
+```
+
+```{r}
+# Calculamos la varianza y error estándar
+s2 <- sse / gl
+s <- sqrt(s2)
+
+d0 <- sqrt(D[1, 1])
+d1 <- sqrt(D[2, 2])
+
+Confianza <- function(b, t_critico, d, s){
+  c(b - t_critico * d * s, b + t_critico * d * s)
+}
+
+IC_beta0 <- Confianza(beta_hat[1], t_critico, d0, s)
+IC_beta1 <- Confianza(beta_hat[2], t_critico, d1, s)
+
+cat("--- INTERVALOS DE CONFIANZA DE LOS COEFICIENTES ---\n")
+cat("d_0:", d0, "| d_1:", d1, "\n")
+cat("IC para beta_0: [", IC_beta0[1], ",", IC_beta0[2], "]\n")
+cat("IC para beta_1: [", IC_beta1[1], ",", IC_beta1[2], "]\n\n")
+```
+
+Con $\phi_0 = (1, x_0)$ se cumple $\phi_0 D^{2} \phi_0^{T} = \frac{1}{n} + \frac{(x_0-\bar{x})^{2}}{s_{xx}} = d_c^{2}$, por lo que el cálculo matricial coincide con la expresión cerrada. A continuación construimos las bandas de confianza y predicción para un $x_0$ arbitrario.
+
+```{r}
+Phi_nuevo <- function(x0) cbind(1, x0)
+
+d_conf <- function(x0, D){
+  P <- Phi_nuevo(x0)
+  sqrt(rowSums((P %*% D) * P))
+}
+
+bandas <- function(x0, beta_hat, D, s, t_critico) {
+  phi0 <- Phi_nuevo(x0)
+  y_hat <- as.numeric(phi0 %*% beta_hat)
+  dc    <- d_conf(x0, D)
+  dp    <- sqrt(1 + dc^2)
+  tibble(
+    x        = x0,
+    y_hat0   = y_hat,
+    conf_inf = y_hat - t_critico * s * dc,
+    conf_sup = y_hat + t_critico * s * dc,
+    pred_inf = y_hat - t_critico * s * dp,
+    pred_sup = y_hat + t_critico * s * dp
+  )
+}
+```
+
+Supongamos ahora que obtenemos la observación
+
+$$
+(x_0, y_0) = (5, 5.04)
+$$
+
+¿Está este valor dentro de nuestro intervalo de predicción?
+
+```{r}
+x0 <- 5
+y0 <- 5.04
+b5 <- bandas(x0, beta_hat, D, s, t_critico)
+
+cat("--- BANDAS PARA x0 = 5 ---\n")
+cat("Predicción puntual (y_hat0):", b5$y_hat0, "\n")
+cat("Banda de Confianza : [", b5$conf_inf, ",", b5$conf_sup, "]\n")
+cat("Banda de Predicción : [", b5$pred_inf, ",", b5$pred_sup, "]\n\n")
+
+dentro <- y0 >= b5$pred_inf & y0 <= b5$pred_sup
+cat("¿Está y0 = 5.04 dentro del intervalo de predicción?:", dentro, "\n")
+```
+
+```{r}
+x_band <- seq(-1, 7, length.out = 200)
+df1 <- bandas(x_band, beta_hat, D, s, t_critico)
+
+lines_tbl <- bind_rows(
+  tibble(x = df1$x, y = df1$pred_sup, type = "Banda de predicción", curve = "pred_sup"),
+  tibble(x = df1$x, y = df1$pred_inf, type = "Banda de predicción", curve = "pred_inf"),
+  tibble(x = df1$x, y = df1$conf_sup, type = "Banda de confianza",  curve = "conf_sup"),
+  tibble(x = df1$x, y = df1$conf_inf, type = "Banda de confianza",  curve = "conf_inf"),
+  tibble(x = df1$x, y = df1$y_hat0,   type = "Recta ajustada",      curve = "ajustada")
+)
+
+new_data_tbl <- tibble(x = 5, y = 5.04)
+
+tibble(x = x, y = y) %>%
+  ggplot(aes(x = x, y = y)) +
+  geom_line(data = lines_tbl, aes(color = type, group = curve), linewidth = 1) +
+  scale_color_manual(values = c(
+    "Banda de predicción" = "#1B681B",
+    "Banda de confianza"  = "#8A1B8A",
+    "Recta ajustada"      = "#67411B"
+  )) +
+  geom_point(color = "#B31B1B", size = 1.2) +
+  geom_point(data = new_data_tbl, color = "#B31B1B", size = 3, shape = 4) +
+  labs(title = "Gráfica con recta ajustada por mínimos cuadrados",
+       x = "x", y = "y", color = "Elementos de la gráfica") +
+  theme_minimal()
+```
+
+Los intervalos de confianza al 95% son $\beta_0 \in [- 1.119, 3.465]$ y $\beta_1 \in [-0.002, 1.380]$. El intervalo de $\beta_1$ contiene al cero, aunque apenas, por lo que con $\alpha = 0.05$ no se puede rechazar $H_0: \beta_1 = 0$. Esto se debe a que con solo $n = 5$ datos se tienen 3 grados de libertad y los intervalos resultan anchos.
+
+Para $x_0 = 5$ la predicción puntual es $\hat{y}_0 = 4.618$ y el intervalo de predicción es $[1.853, 7.383]$, por lo que la observación $y_0 = 5.04$ sí se encuentra dentro del intervalo de predicción.
+
+## Problema 2
+
+Lee los datos contenidos en el archivo y genera un gráfico con estos puntos así como la recta ajustada usando el método de mínimos cuadrados. Genera igualmente las bandas de significancia y predicción para estos datos. Realice una interpretación de sus resultados.
+
+```{r}
+data <- read.csv("../../data/2_sample_data.csv")
+
+x <- data$x
+y <- data$y
+n <- length(x)
+
+alpha <- 0.05
+gl <- n - 2
+t_critico <- qt(1 - alpha/2, gl)
+
+phi <- cbind(1, x)
+Y <- matrix(y, ncol = 1)
+
+D <- solve(t(phi) %*% phi)
+A <- D %*% t(phi)
+H <- phi %*% A
+
+beta_hat <- A %*% Y
+rownames(beta_hat) <- c("beta_0", "beta_1")
+colnames(beta_hat) <- "Estimación"
+
+cat("--- COEFICIENTES CALCULADOS ---\n")
+print(beta_hat)
+
+Y_hat <- H %*% Y
+s2 <- sum((Y - Y_hat)^2) / gl
+s <- sqrt(s2)
+```
+
+```{r}
+d0 <- sqrt(D[1, 1])
+d1 <- sqrt(D[2, 2])
+
+IC_beta0 <- Confianza(beta_hat[1], t_critico, d0, s)
+IC_beta1 <- Confianza(beta_hat[2], t_critico, d1, s)
+
+cat("--- INTERVALOS DE CONFIANZA DE LOS COEFICIENTES ---\n")
+cat("d_0:", d0, "| d_1:", d1, "\n")
+cat("IC para beta_0: [", IC_beta0[1], ",", IC_beta0[2], "]\n")
+cat("IC para beta_1: [", IC_beta1[1], ",", IC_beta1[2], "]\n\n")
+```
+
+```{r}
+x_seq <- seq(min(x), max(x), length.out = 200)
+df_grafica <- bandas(x_seq, beta_hat, D, s, t_critico)
+
+
+grafico_matricial <- ggplot() +
+  geom_point(data = data, aes(x = x, y = y), color = "#B31B1B", size = 2, alpha = 0.8) +
+  geom_line(data = df_grafica, aes(x = x, y = pred_sup, color = "Banda de predicción"),
+            linewidth = 1, linetype = "dashed") +
+  geom_line(data = df_grafica, aes(x = x, y = pred_inf, color = "Banda de predicción"),
+            linewidth = 1, linetype = "dashed") +
+  geom_line(data = df_grafica, aes(x = x, y = conf_sup, color = "Banda de confianza"), 
+            linewidth = 1) +
+  geom_line(data = df_grafica, aes(x = x, y = conf_inf, color = "Banda de confianza"), 
+            linewidth = 1) +
+  geom_line(data = df_grafica, aes(x = x, y = y_hat0, color = "Recta ajustada"), 
+            linewidth = 1.2) +
+  scale_color_manual(
+    name = "Elementos de la gráfica",
+    values = c(
+      "Banda de predicción" = "#1B681B",
+      "Banda de confianza"  = "#000000",
+      "Recta ajustada"      = "#67411B"
+    )
+  ) +
+  labs(
+    title = "Ajuste por Mínimos Cuadrados (Enfoque Matricial)",
+    subtitle = "Datos del archivo 2_sample_data.csv",
+    x = "Variable x",
+    y = "Variable y"
+  ) +
+  theme_minimal()
+
+# Mostrar la gráfica
+grafico_matricial
+```
+
+```{r}
+x_bar <- mean(x)
+s_xx  <- sum((x - x_bar)^2)
+factor_banda <- s * t_critico
+
+cat("x_bar =", x_bar, "| s_xx =", s_xx, "| s * t =", factor_banda, "\n")
+
+# Cobertura: ¿cuántos puntos observados caen dentro de la banda de predicción?
+b_obs <- bandas(x, beta_hat, D, s, t_critico)
+dentro_pred <- sum(y >= b_obs$pred_inf & y <= b_obs$pred_sup)
+cat("Puntos dentro de la banda de predicción:", dentro_pred, "de", n,
+    "(", round(100 * dentro_pred / n, 1), "% )\n")
+```
+
+La recta ajustada es $\hat{y} = 0.126 + 0.981\,x$. Los intervalos de confianza al 95% son $\beta_0 \in [0.001, 0.251]$ y $\beta_1 \in [0.960, 1.003]$.
+
+La banda de confianza queda prácticamente sobre la recta ajustada. Su semiancho es $\hat{s}\,t_{\alpha/2,n-2}\sqrt{\frac{1}{n}+\frac{(x_0-\bar{x})^{2}}{s_{xx}}}$, y con $n = 1000$ y $s_{xx} = 8372.4$ ambos términos dentro de la raíz son muy pequeños, por lo que la recta media está estimada con mucha precisión.
+
+La banda de predicción es mucho más ancha, con un semiancho cercano a $\hat{s}\,t_{\alpha/2,n-2} = 1.957$ en todo el rango. Esto se debe al término $1$ dentro de la raíz, que representa la varianza $\sigma^2$ de una observación individual y que no disminuye al aumentar $n$. De los `1000` puntos observados, 947 (94.7 %) caen dentro de la banda de predicción, lo cual es consistente con el nivel de confianza de 95%.

@@ -1,0 +1,258 @@
+---
+c ---
+title: "Actividad 1.8"
+author: "Hugo Meza"
+date: "2026-11-22"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(psych)        
+library(ggcorrplot)   
+library(performance)  
+library(GPArotation)  
+```
+
+# Actividad 1.8 Análisis Factorial I
+
+Se trata de varias variables limnológicas de varios lagos Neotropicales. Se hace un estudio para saber el grado de **productividad** potencial del lago (concentración de nutrientes y carbono orgánico disuelto) y la adecuación del **hábitat** en lo que se refiere a sus condiciones para la vida (profundidad, pH, conductividad, oxígeno disuelto y temperatura). Estos dos factores, **productividad** y **hábitat**, podrían explicar razonablemente la correlación observada entre las distintas variables. Se trata de hacer un análisis factorial en este contexto para comprobar si este modelo responde razonablemente a la realidad y es, por lo tanto, adecuado para explicar los siguientes datos:
+
+```{r}
+M <- read.csv("../../data/datoslago.csv")
+str(M)
+summary(M)
+sapply(M, function(x) length(unique(x))) 
+```
+
+**Observaciones sobre los datos.** Hay 90 lagos y 6 variables. Dos detalles condicionan todo el análisis:
+
+1.  `Temperatura` y `Oxigeno` solo toman 4 valores distintos cada una: son constantes dentro de cada grupo de lagos.
+2.  `LnProteinas` y `LnTamano` son transformaciones logarítmicas de `Proteinas` y `Tamano`. Contienen prácticamente la misma información que las originales, por lo que se esperan correlaciones muy altas por construcción.
+
+## 1. Matriz de correlaciones Significancia por Pares
+
+```{r}
+Corr <- corr.test(M,adjust="none")  # M es la matriz de datos
+cat("Matriz de correlaciones (r): \n")
+round(Corr$r, 4)
+
+cat("\nMatriz de Valores p (Significancia por pares):\n")
+round(Corr$p, 4)
+```
+
+```{r}
+round(Corr$p["Temperatura","LnProteinas"],3)
+```
+
+- El bloque `Tamano`, `LnTamano`, `Proteinas`, `LnProteinas` presenta correlaciones positivas altas: 0.974 entre Tamano y su logaritmo, 0.844 entre Tamano y LnProteinas, 0.78 entre Proteinas y su logaritmo. Todas presentan p \< 0.001.
+- `Oxigeno` se correlaciona negativamente y de forma moderada con el bloque anterior (entre -0.38 y -0.31 y positivamente con `Temperatura` (0.338), todas significativas al 1%.
+- `Temperatura` tiene correlaciones débiles con el resto (\|r\| \< 0.35). La única no significativa al 5% es Temperatura con LnProteinas (p = 0.46).
+- De los 15 pares, 14 son significativos al 5%. Esto ya sugiere estructura común, aunque parte de ella es artificial por la presencia de las variables transformadas.
+
+## 2. Visualización de Correlaciones y Correlación Parcial
+
+```{r}
+ggcorrplot(Corr$r, 
+           type = "lower", 
+           lab = TRUE, 
+           lab_size = 3,
+           colors = c("#2166AC", "white", "#B2182B"),
+           title = "Matriz de Correlaciones - Lagos Neotropicales")
+
+```
+
+Se distinguen dos grupos. El primero, en rojo intenso, es el bloque tamaño-proteínas (originales y logaritmos), muy correlacionado entre sí. El segundo es más débil: `Temperatura` y `Oxigeno` se asocian positivamente entre sí y tienen signos opuestos al primer bloque (azules hacia `Oxigeno`). Esta separación visual es consistente con dos factores, uno asociado a "productividad" (tamaño y proteínas) y otro a "hábitat" (temperatura y oxígeno).
+
+### 2.1 Correlación parcial
+
+```{r}
+R_parcial <- partial.r(M)
+cat("### Matriz de Correlación Parcial:\n")
+round(R_parcial, 3)
+ggcorrplot(R_parcial, type = "lower", lab = TRUE, lab_size = 3,
+           colors = c("#2166AC", "white", "#B2182B"),
+           title = "Correlaciones parciales")
+```
+
+Al controlar por las demás variables, la mayoría de las correlaciones bajan. Se mantienen altas Tamano con LnTamano (0.9) y Proteinas con LnProteinas (0.63), que son redundancias por construcción. Aparecen además parciales de signo cambiado (por ejemplo Proteinas con LnTamano, -0.55). Para el análisis factorial lo deseable es que las parciales sean pequeñas (la correlación se explica por factores comunes); aquí varias no lo son, lo cual anticipa un KMO moderado.
+
+## 3. Prueba de esfericidad de Barlett
+
+- H0: la matriz de correlaciones es la identidad (variables no correlacionadas).
+- H1: la matriz de correlaciones difiere de la identidad (hay correlación conjunta).
+
+```{r}
+b <- check_sphericity_bartlett(M)
+b
+c(chisq = b$chisq, gl = b$dof, p = b$p)
+```
+
+Con $\chi^2$ = 557.86, 15 grados de libertad y p = 3.14e-109, se rechaza H0. Existe correlación conjunta significativa, por lo que el análisis factorial es aplicable según este criterio.
+
+## 4. Coeficiente KMO
+
+```{r}
+K <- KMO(Corr$r)
+cat("El KMO global es:", round(K$MSA, 3), "\n")
+round(K$MSAi, 3)
+```
+
+- **KMO global =** 0.63: "mediocre" en la escala de Kaiser (1974). En la escala simplificada queda por debajo de 0.70, es decir, inadecuado.
+- **KMO individuales**: LnProteinas es la mejor (0.73, medio). Oxigeno, Tamano, Proteinas y LnTamano están entre 0.60 y 0.68 (mediocres). **Temperatura tiene 0.41 , inaceptable**, porque comparte poca varianza con el resto.
+
+**¿Contradice a Bartlett?** Parcialmente. Bartlett solo indica que la matriz no es la identidad; con n = 90 y correlaciones tan altas como 0.97 es casi seguro rechazar. El KMO es más exigente: mide si las correlaciones se deben a factores comunes y no a relaciones entre pares específicos. El KMO moderado refleja que buena parte de la correlación viene de pares redundantes (variable y su logaritmo) y que Temperatura casi no aporta varianza común. Conclusión: el análisis factorial es viable pero con reservas.
+
+```{r}
+KMO(cor(M[, setdiff(names(M), "Temperatura")]))$MSA
+```
+
+Se conservan las 6 variables en el resto del análisis porque Temperatura es central en la hipótesis de hábitat.
+
+## 5. Número de factores: gráfica de Cattell y análisi paralelo
+
+```{r}
+scree(M, main = "Gráfica de sedimentación (Cattell)")
+eigen(Corr$r)$values
+```
+
+```{r}
+set.seed(123)
+pa_ml <- fa.parallel(M, fm = "ml", fa = "fa",
+                     main = "Análisis paralelo, máxima verosimilitud")
+```
+
+```{r}
+set.seed(123)
+pa_mr <- fa.parallel(M, fm = "minres", fa = "fa",
+                     main = "Análisis paralelo, mínimo residuo")
+```
+
+```{r}
+pa_mr$nfact
+```
+
+- `paste(round(eigen(Corr$r)$values, 2), collapse = ", ")`**Cattell**: los valores propios de R son $[3.53, 1.41, 0.63, 0.31, 0.1, 0.02]$. El codo aparece en el tercer valor; antes de él hay dos valores claramente separados.
+- **Análisis paralelo**: con ML sugiere 2 factores y con minres 2. Los dos primeros valores propios reales superan a los simulados; el tercero ya no.
+
+Se usan **2 factores**, lo cual coincide con la hipótesis (productividad y hábitat).
+
+## 6. Análisis factorial: máxima verosimilitud y mínimo residuo
+
+```{r}
+modelo1 <- fa(M, nfactors = 2, rotate = "none", fm = "mle")     # máxima verosimilitud
+modelo2 <- fa(M, nfactors = 2, rotate = "none", fm = "minres")  # mínimo residuo
+cat("Máxima verosimilitud \n")
+print(modelo1, cut = 0.3, digits = 3)
+cat("\nMínimo resudio \n")
+print(modelo2, cut = 0.3, digits = 3)
+```
+
+### 6.1 Comunalidades y unicidades
+
+```{r}
+T <- data.frame(
+  h2_ML     = round(modelo1$communality, 3),
+  u2_ML     = round(modelo1$uniquenesses, 3),
+  h2_MINRES = round(modelo2$communality, 3),
+  u2_MINRES = round(modelo2$uniquenesses, 3)
+)
+T
+```
+
+### 6.2 Indicadores de ajuste
+
+```{r}
+data.frame(
+  Modelo      = c("ML", "MINRES"),
+  Var_acum    = round(c(sum(modelo1$Vaccounted[2, ]), sum(modelo2$Vaccounted[2, ])), 3),
+  RMSR        = round(c(modelo1$rms, modelo2$rms), 3),
+  RMSEA       = round(c(modelo1$RMSEA[1], modelo2$RMSEA[1]), 3),
+  Chi2_emp_p  = signif(c(modelo1$EPVAL, modelo2$EPVAL), 3)
+)
+```
+
+```{r}
+round(modelo2$rms,3)
+```
+
+- **ML**: explica 70.7 % de la varianza. El factor 1 carga fuerte en Tamano, LnTamano, LnProteinas y Proteinas. El factor 2 (sin rotar) mezcla Temperatura (negativa), Proteinas y LnProteinas. LnTamano tiene unicidad casi cero (0.005), ML "absorbe" la variable en el factor porque es casi idéntica a Tamano. Temperatura (h2 = 0.4) y Oxigeno (h2 = 0.21) quedan mal explicadas.
+- **MINRES**: explica 75.6 %. La estructura es más limpia: MR1 agrupa tamaño y proteínas, MR2 agrupa Temperatura (0.92) y Oxigeno. Temperatura sube a h2 = 0.85. Oxigeno sigue siendo la peor explicada (h2 = 0.28) y carga en ambos factores.
+- **Ajuste**: el RMSR es bajo en ambos (0.059 y 0.029), es decir, los residuos de correlación son pequeños, y el $\chi^2$ empírico no es significativo en MINRES. Sin embargo RMSEA es muy alto. Esto se debe a que el modelo tiene solo 4 grados de libertad y a la redundancia entre variables y sus logaritmos, que el modelo no puede reproducir exactamente con dos factores.
+
+El aviso sobre los pesos de las puntuaciones factoriales se ignora: no se usan las puntuaciones, solo cargas y comunalidades.
+
+## 7. Rotaciones Varimax y Quartimax
+
+```{r}
+modelo1V <- fa(M, nfactors = 2, rotate = "varimax",   fm = "mle")
+modelo2V <- fa(M, nfactors = 2, rotate = "varimax",   fm = "minres")
+modelo1Q <- fa(M, nfactors = 2, rotate = "quartimax", fm = "mle")
+modelo2Q <- fa(M, nfactors = 2, rotate = "quartimax", fm = "minres")
+```
+
+### 7.1 Varimax
+
+```{r}
+print(modelo1V$loadings, cut = 0.3)
+biplot.psych(modelo1V, main = "Rotación Varimax", sub = "Método MLE",
+             col = c("gray", "red"))
+fa.diagram(modelo1V, main = "Rotación Varimax, método MLE")
+```
+
+```{r}
+print(modelo2V$loadings, cut = 0.3)
+biplot.psych(modelo2V, main = "Rotación Varimax", sub = "Método MINRES",
+             col = c("gray", "red"))
+fa.diagram(modelo2V, main = "Rotación Varimax, método MINRES")
+```
+
+### 7.2 Quartimax
+
+```{r}
+print(modelo1Q$loadings, cut = 0.3)
+biplot.psych(modelo1Q, main = "Rotación Quartimax", sub = "Método MLE",
+             col = c("gray", "red"))
+fa.diagram(modelo1Q, main = "Rotación Quartimax, método MLE")
+```
+
+```{r}
+print(modelo2Q$loadings, cut = 0.3)
+biplot.psych(modelo2Q, main = "Rotación Quartimax", sub = "Método MINRES",
+             col = c("gray", "red"))
+fa.diagram(modelo2Q, main = "Rotación Quartimax, método MINRES")
+```
+
+```{r}
+round(100*sum(modelo2V$Vaccounted[2,]),1)
+```
+
+- En las cuatro soluciones el **factor 1** agrupa Tamano, LnTamano, LnProteinas y Proteinas (cargas entre 0.69 y 0.98), con Oxigeno en negativo (alrededor de -0.36 a -0.38). Se interpreta como **productividad potencial**: lagos con mayor tamaño/proteínas, asociado a menor oxígeno disuelto (coherente con mayor consumo de oxígeno por materia orgánica).
+- El **factor 2** está dominado por **Temperatura** y se interpreta como **condiciones de hábitat**. Con MINRES, Oxigeno carga positivamente (0.4 en Varimax) junto a Temperatura (0.91), y Proteinas negativamente. Con ML el factor 2 es más débil: Temperatura carga 0.63 y Oxigeno queda por debajo de 0.3.
+- **Varimax vs Quartimax**: los resultados son casi idénticos. Quartimax tiende a concentrar más carga en el primer factor (factor general) y Varimax reparte un poco más entre factores, pero con solo dos factores y una estructura dominada por el factor 1 la diferencia es mínima. La varianza acumulada no cambia con la rotación (ML 70.7%, MINRES 75.6%).
+- En los biplots, los vectores de tamaño y proteínas apuntan en la dirección del factor 1, Temperatura en la del factor 2, y Oxigeno queda entre ambos: es una variable compleja que pertenece a los dos factores.
+
+## 8. Conclusiones
+
+- **Adecuación de los datos.** Bartlett rechaza la esfericidad (hay correlación conjunta), pero el KMO global es mediocre (0.63) y Temperatura tiene MSA inaceptable. El análisis es viable con reservas.
+- **Número de factores.** Cattell, Kaiser y el análisis paralelo (ML y MINRES) coinciden en 2 factores, lo que apoya la hipótesis de partida.
+- **Estructura.** Se identifican un factor de **productividad** (tamaño y proteínas, con oxígeno en sentido inverso) y un factor de **hábitat** (temperatura y, en menor medida, oxígeno). La estructura teórica se reproduce razonablemente.
+- **Limitaciones.**
+  - Incluir variables junto con su logaritmo (Tamano/LnTamano, Proteinas/LnProteinas) infla las correlaciones y el factor 1, y produce unicidades casi nulas. Lo recomendable es usar solo una versión de cada variable.
+
+  - Temperatura y Oxigeno tienen solo 4 valores distintos: describen grupos de lagos, no variación entre lagos, lo que limita su peso en el modelo.
+
+  - Los datos no incluyen varias variables mencionadas en el planteamiento (pH, conductividad, profundidad, carbono orgánico), por lo que el factor de hábitat queda representado por solo dos indicadores.
+
+  - El índice RMSEA indica mal ajuste global, aunque los residuos (RMSR) son pequeños.
+
+    ```{r}
+    round(100*sum(modelo1V$Vaccounted[2,]),1)
+    ```
+- **Modelo más convincente.** **Mínimo residuo** con rotación **Varimax**. Explica más varianza (75.6% vs 70.7%), tiene menor RMSR, y da una separación más clara de los dos factores (Temperatura y Oxigeno sí cargan en el factor de hábitat).
+
+En síntesis, el modelo de dos factores (productividad y hábitat) es razonable como descripción de los datos, pero su validez está limitada por la redundancia de variables y el escaso número de indicadores de hábitat.
+
+# Declaratoria de uso de IA durante el desarrollo de trabajo
+
+No se utilizó IA. Declaro que durante la elaboración de esta actividad de aprendizaje para evaluar no utilicé herramientas de Inteligencia Artificial generativa.

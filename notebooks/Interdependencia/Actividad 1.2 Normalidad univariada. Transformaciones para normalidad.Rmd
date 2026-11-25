@@ -1,0 +1,507 @@
+---
+title: "Actividad 1.2"
+author: "Hugo Meza"
+date: "2026-11-04"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 7, fig.height = 4.5)
+library(moments)
+library(nortest)
+library(e1071)
+library(MASS)
+library(VGAM)
+library(lmtest)
+```
+
+# 1. Probando normalidad en una base de datos
+
+```{r dataset-cars}
+data(cars)
+speed <- cars$speed
+dist  <- cars$dist
+```
+
+## A. Pruebas de Normalidad Univariada
+
+```{r}
+# Shapiro Wilk
+shapiro.test(speed)
+shapiro.test(dist)
+
+# Anderson Darling
+ad.test(speed)
+ad.test(dist)
+
+# Jarque-Bera
+jarque.test(speed)
+jarque.test(dist)
+
+# Kolmogorov-Smirnov (Lilliefors)
+lillie.test(speed)
+lillie.test(dist)
+```
+
+Los resultados de las pruebas de normalidad muestran un comportamiento contrastante entre ambas variables.
+
+En primera instancia, la variable de `speed` en todas las pruebas de hipótesis aplicadas se obtienen p-valores holgadamente superiores al nivel de significancia de $\alpha = 0.05$. Con esto se concluye que no existe suficiente evidencia estadística para rechazar la hipótesis nula de normalidad, sugiriendo que la velocidad de los automóviles sigue una distribución normal.
+
+Por otro lado la variable `dist` (distancia) presenta resultados contradictorios según la prueba empleada. Las pruebas de Jarque-Bera ($p = 0.07315$) y Anderson-Darling ($p = 0.05021$) arrojan p-valores por encima de $0.05$ (aunque este último en el límite de decisión), bajo los cuales no se rechazaría la normalidad. Sin embargo, pruebas como Shapiro-Wilk ($p = 0.03910$) y Kolmogorov-Smirnov/Lilliefors ($p = 0.04335$) obtienen p-valores inferiores a $0.05$, indicando evidencia suficiente para rechazar la hipótesis nula de normalidad.
+
+Esta discrepancia entre pruebas pone en evidencia que los test de hipótesis por sí solos pueden ser sensibles al tamaño de la muestra o a la presencia de asimetrías específicas. Por ello, resulta indispensable complementar la decisión analítica con el estudio del sesgo, la curtosis y herramientas visuales (QQ-plots e histogramas).
+
+## B. QQ-plots
+
+```{r}
+qqnorm(speed, main = "QQ-Plot: Speed")
+qqline(speed, col = "blue")
+
+qqnorm(dist, main = "QQ-Plot: Distance")
+qqline(dist, col = "red")
+```
+
+En este caso el QQ-plot de `speed` parece mantenerse constante con la recta teórica planteada. Esto ayuda a respaldar las pruebas de normalidad realizadas en la sección anterior. Cabe destacar que pueden verse algunos comportamientos en la cola derecha, donde empiezan a alejarse un poco más sobre esta recta en comparación de los cuantiles centrales.
+
+Por otra parte, el QQ-plot de la variable `dist`(distancia) exhibe un comportamiento claramente distinto. Se aprecia cómo los datos se desvían respecto a la recta de referencia, lo cual anticipa la presencia de un sesgo positivo y una curtosis alejada de los parámetros normales esperados (sesgo $\neq 0$ y curtosis centrada en 0 $\neq 0$). En los cuantiles centrales, los puntos muestran una ligera curvatura, mientras que en la cola derecha se disparan por encima de la recta teórica, evidenciando la presencia de valores atípicos superiores y confirmando la asimetría observada en las pruebas de Lilliefors.
+
+## C. Coeficientes de Sesgo y Curtosis
+
+```{r}
+# Medidas para speed
+sk_speed <- skewness(speed)
+kt_speed <- kurtosis(speed)
+
+# Medidas para dist
+sk_dist <- skewness(dist)
+kt_dist <- kurtosis(dist)
+
+cat("Speed - Sesgo:", sk_speed, "| Curtosis:", kt_speed, "\n")
+cat("Dist - Sesgo:", sk_dist, "| Curtosis:", kt_dist, "\n")
+```
+
+Estos coeficientes nos ayudan a describir las desviaciones presentadas en los gráficos.
+
+La variable `speed` presenta un coeficiente de sesgo cercano a 0, lo que confirma una distribución prácticamente simétrica con una ligera inclinación hacia la izquierda. Su curtosis negativa indica una forma levemente platicúrtica. Estas desviaciones son mínimas, lo que explica por qué el QQ-plot se mantiene tan alineado y por qué todas las pruebas de hipótesis concluyen en no rechazar la normalidad.
+
+En la variable `dist` se muestra un sesgo positivo moderado ($\text{Sesgo} > 0.5$), lo que cuantifica matemáticamente la asimetría a la derecha apreciada en el QQ-plot y en las pruebas de Kolmogorov-Smirnov. Esta asimetría refleja que, conforme la velocidad aumenta, las distancias crecen de forma no lineal generando valores atípicos hacia la cola superior. Su valor de curtosis en exceso es levemente positivo ($0.119$), lo que confirma que el alejamiento principal de la normalidad proviene del sesgo y no de una concentración anómala en las colas.
+
+## D. Comparación de Medidas de Tendencia Central
+
+```{r}
+midrange <- function(x) (max(x) + min(x)) / 2
+
+summary_table <- data.frame(
+  Variable = c("Speed", "Distance"),
+  Media = c(mean(speed), mean(dist)),
+  Mediana = c(median(speed), median(dist)),
+  Rango_Medio = c(midrange(speed), midrange(dist))
+)
+
+knitr::kable(summary_table, caption = "Comparación de Medidas de Tendencia Central")
+```
+
+El análisis comparativo entre la media, la mediana y el rango medio permite evaluar la simetría y el impacto de los valores extremos en cada variable
+
+En la variable `speed` existe una alta convergencia entre las tres medidas de tendencia central. La cercanía entre la media ($15.40$) y la mediana ($15.00$) confirma la elevada simetría de la distribución de velocidades. El rango medio ($14.50$) no se aleja significativamente del centro de los datos, lo que reafirma la ausencia de valores atípicos severos que distorsionen el promedio y respalda las conclusiones de normalidad obtenidas previamente.
+
+Por otra parte, la variable `dist` muestra una discrepancia notable entre sus medidas centrales. La media ($42.98$) se encuentra desplazada a la derecha de la mediana ($36.00$), una señal inequívoca de sesgo positivo (asimetría a la derecha). Además, el rango medio ($61.00$) se dispara muy por encima de la media y la mediana debido a la presencia de observaciones con distancias considerablemente elevadas en el extremo superior. Esta discrepancia evidencia la alta sensibilidad de la media y del rango medio a los valores atípicos de la cola derecha.
+
+## E. Diagramas de Boxplot
+
+```{r}
+boxplot(speed, main = "Boxplot: Speed", col = 0)
+boxplot(dist, main = "Boxplot: Distance", col = 0)
+```
+
+El análisis visual mediante boxplots confirma la estructura de distribución de ambas variables y el impacto de sus valores extremos.
+
+La variable `speed` muestra una estructura altamente simétrica. La línea gruesa de la mediana se ubica casi en el centro del rango intercuartílico. Asimismo, la longitud del bigote inferior y la del bigote superior son de proporciones muy similares. Destaca la ausencia total de valores atípicos (outliers) fuera de los límites de los bigotes, lo que apoya los resultados previos de normalidad y el coeficiente de sesgo cercano a cero.
+
+En el otro caso, la variable `dist` presenta claros indicios de asimetría a la derecha (sesgo positivo). La mediana está claramente desplazada hacia la parte inferior de la caja, haciendo que el espacio entre el primer cuartil y la mediana sea más corto que el tramo hacia el tercer cuartil. Además, el bigote superior se extiende un poco más que el inferior y se observa la presencia de un valor atípico (outlier) superior situado en $120\text{ ft}$. Esta observación atípica jala la media y el rango medio hacia arriba, explicando por qué la prueba de Lilliefors tienden a rechazar la hipótesis de normalidad para esta variable.
+
+## F. Histogramas con Densidad Empírica y Curva Normal Teórica
+
+```{r}
+# Speed
+hist(speed, freq = FALSE, main = "Histograma de Speed")
+lines(density(speed), col = "red", lwd = 2)
+curve(dnorm(x, mean = mean(speed), sd = sd(speed)), 
+      from = min(speed), to = max(speed), add = TRUE, col = "blue", lwd = 2, lty = 2)
+legend("topleft", legend = c("Empírica", "Teórica Normal"), col = c("red", "blue"), lty = 1:2, cex = 0.8)
+
+# Distance
+hist(dist, freq = FALSE, main = "Histograma de Distance")
+lines(density(dist), col = "red", lwd = 2)
+curve(dnorm(x, mean = mean(dist), sd = sd(dist)), 
+      from = min(dist), to = max(dist), add = TRUE, col = "blue", lwd = 2, lty = 2)
+legend("topleft", legend = c("Empírica", "Teórica Normal"), col = c("red", "blue"), lty = 1:2, cex = 0.8)
+```
+
+Con estas gráficas es posible tener información más certera sobre la distribución y naturaleza que siguen las variables analizadas.
+
+La variable `speed` presenta una densidad empírica (línea roja) que se ajusta de manera notable a la curva normal teórica de Campana de Gauss (línea azul punteada). Aunque se percibe un centro ligeramente aplanado (reflejando la curtosis negativa de $-0.673$), la masa de datos se distribuye de forma simétrica alrededor del promedio de $15.40\text{ mph}$. Ambas curvas decaen casi de forma idéntica hacia los extremos, lo que confirma visualmente el cumplimiento del supuesto de normalidad.
+
+En su parte, la variable `dist` exhibe un desfase claro entre la distribución empírica y la campana normal teórica. El pico máximo de la densidad empírica (línea roja) se desplaza hacia la izquierda (alrededor del intervalo de $20$ a $40\text{ ft}$) y desciende más rápido de lo esperado en la zona central. Posteriormente, la curva empírica se extiende suavemente hacia la derecha abarcando valores superiores a $100\text{ ft}$. Esta cola alargada confirma la asimetría positiva de $0.759$ provocada por las distancias.
+
+## Conclusión
+
+Tras integrar los métodos analíticos, métricas descriptivas y representaciones gráficas sobre la base de datos `cars`:
+
+1.  **`speed` (Velocidad):** Se concluye que sigue una distribución normal. Las pruebas de hipótesis aplicadas (Shapiro-Wilk, Anderson-Darling, Jarque-Bera y Lilliefors) obtuvieron p-valores $p > 0.05$, respaldadas por una media y mediana prácticamente idénticas ($15.40$ vs. $15.00$), un QQ-plot lineal constante, un boxplot sin valores atípicos y un histograma con excelente superposición respecto a la densidad
+
+2.  **`dist` (Distancia):** Se concluye que no sigue una distribución normal estricta. Presenta un sesgo positivo moderado ($\text{Sesgo} = 0.759$) impulsado por la presencia de valores atípicos superiores. Este comportamiento provoca que la media ($42.98$) sobrepase a la mediana ($36.00$), distorsionando el rango medio ($61.00$) y llevando a pruebas como Shapiro-Wilk ($p = 0.03910$) y Lilliefors ($p = 0.04335$) a rechazar la hipótesis nula de normalidad.
+
+# 2. Transformación de variables
+
+Como vimos en la parte 1, no todas las variables del dataset siguen una distribución normal, por lo que se busca realizar una transformación para que se cumpla esto. La variable speed ya es compatible con una normal, mientras que dist rechaza normalidad en Shapiro-Wilk y Lilliefors y presenta sesgo positivo. Por ello la transformación se aplica a la distancia, considerando el modelo lineal $dist = \beta_0 + \beta_1 speed + \epsilon$
+
+## A. Valor de $\lambda$ : exacto y aproximado
+
+```{r}
+# Encontrar lambda exacto para el modelo lineal
+modelo_inicial <- lm(dist ~ speed, data = cars)
+bc <- boxcox(modelo_inicial)
+lambda_exact <- bc$x[which.max(bc$y)]
+
+# Definir lambda aproximado
+lambda_aprox <- 0.5 # Aproximación a la raíz cuadrada
+
+abline(v = lambda_exact, col = "red", lwd = 2)
+abline(v = lambda_aprox, col = "darkgreen", lwd = 2, lty = 2)
+legend("bottomleft", legend = c("Exacto", "Aproximado"), col = c("red", "darkgreen"),
+       lty = 1:2, lwd = 2, cex = 0.8)
+
+cat("Lambda exacto:", lambda_exact, "\n")
+cat("Lambda aproximado:", lambda_aprox, "\n")
+
+```
+
+El valor de $\lambda$ que maximiza la verosimilitud (transformación exacta) es $\hat{\lambda} = 0.42$. El intervalo de confianza al 95% (que se ve en el gráfico) contiene a 0.5, que corresponde a una raíz cuadrada y se toma como valor aproximado.
+
+## B. Ecuaciones de las transformaciones
+
+La transformación de Box-Cox es
+
+$$Y^{(\lambda)} = \begin{cases} \dfrac{Y^{\lambda} - 1}{\lambda} & \lambda \neq 0 \\[2mm] \ln Y & \lambda = 0 \end{cases}$$
+
+Con los valores encontrados, para $Y = dist$:
+
+$$\text{Exacta: } \; dist^{(\hat\lambda)} = \frac{dist^{0.42} - 1}{0.42}$$
+
+En el caso del aproximado, tomaremos una aproximación más práctica como:
+
+$$
+\text{Aproximada: } dist^{\lambda} = \sqrt{dist}
+$$
+
+```{r}
+dist_exact <- (cars$dist^lambda_exact - 1) / lambda_exact
+dist_aprox <- (cars$dist^lambda_aprox)
+```
+
+## C. Análisis de normalidad de las transformaciones
+
+### C.1 Medidas descriptivas, sesgo y curtosis
+
+```{r}
+medidas <- function(x) c(Mínimo = min(x), Q1 = unname(quantile(x, 0.25)), Media = mean(x), Mediana = median(x), Q3 = unname(quantile(x, 0.75)), Máximo = max(x), Sesgo = skewness(x), Curtosis = kurtosis(x))
+
+tabla_medidas <- rbind("dist (original)" = medidas(dist),
+                       "Box-Cox exacta" = medidas(dist_exact),
+                       "Box-Cox aproximada" = medidas(dist_aprox))
+
+knitr::kable(round(tabla_medidas, 3), caption = "Medidas descriptivas: datos originales vs. transformaciones")
+```
+
+Las medidas confirman la mejora. En la distancia original la media (`42.98`) está claramente por encima de la mediana (`36`) y el sesgo es de `0.759`. En las transformaciones, media y mediana prácticamente coinciden (`8.712` vs. `8.423` en la exacta y `6.242` vs. `6` en la aproximada), y el sesgo baja a `-0.170` y `-0.019`, respectivamente, valores más cercanos a cero que en el caso original. La curtosis (en exceso, donde la normal vale 0) en cambio es ligeramente negativa en ambas transformaciones pero se mantienen en un rango entre 0 y -0.5 (`-0.187` y `-0.314`), es decir, una forma levemente platicúrtica.
+
+### C.2 Histogramas y QQ-plots
+
+```{r}
+hist_norm <- function(x, main) {
+  h <- hist(x, plot = FALSE)
+  ymax <- max(h$density, density(x)$y, dnorm(mean(x), mean(x), sd(x)))
+  hist(x, freq = FALSE, main = main, xlab = "", ylim = c(0, ymax * 1.1))
+  lines(density(x), col = "red", lwd = 2)
+  curve(dnorm(x, mean = mean(x), sd = sd(x)), add = TRUE, col = "blue", lwd = 2, lty = 2)
+  legend("topright", legend = c("Empírica", "Teórica Normal"), col = c("red", "blue"),
+         lty = 1:2, cex = 0.7)
+}
+
+par(mfrow = c(1, 3))
+hist_norm(dist, "Distancia (original)")
+hist_norm(dist_exact, paste0("Box-Cox exacta (lambda = ", round(lambda_exact, 2), ")"))
+hist_norm(dist_aprox, paste0("Box-Cox aproximada (lambda = ", lambda_aprox, ")"))
+par(mfrow = c(1, 1))
+```
+
+```{r}
+par(mfrow = c(1, 3))
+qqnorm(dist, main = "QQ-Plot: original"); qqline(dist, col = "red")
+qqnorm(dist_exact, main = "QQ-Plot: Box-Cox exacta"); qqline(dist_exact, col = "red")
+qqnorm(dist_aprox, main = "QQ-Plot: Box-Cox aproximada"); qqline(dist_aprox, col = "red")
+par(mfrow = c(1, 1))
+```
+
+El histograma de la distancia original tiene la cola derecha alargada y el pico desplazado a la izquierda, mientras que en las dos transformaciones la densidad empírica queda mucho más cerca de la campana teórica y simétrica. En los QQ-plots, los puntos de la distancia original se despegan de la recta en la cola superior (la observación de 120 ft); tras transformar, los puntos siguen la recta en todo el rango y solo se aprecia una ligera desviación en los extremos.
+
+### C.3 Pruebas de normalidad
+
+```{r}
+p_normalidad <- function(x) c("Shapiro-Wilk" = shapiro.test(x)$p.value,
+                              "Anderson-Darling" = ad.test(x)$p.value,
+                              "Jarque-Bera" = jarque.test(x)$p.value,
+                              "Lilliefors" = lillie.test(x)$p.value)
+
+pv_bc <- rbind("dist (original)" = p_normalidad(dist),
+               "Box-Cox exacta" = p_normalidad(dist_exact),
+               "Box-Cox aproximada" = p_normalidad(dist_aprox))
+
+knitr::kable(round(pv_bc, 4), caption = "p-valores de las pruebas de normalidad (H0: los datos son normales)")
+```
+
+Para la distancia original, Shapiro-Wilk y Lilliefors rechazan normalidad y Anderson-Darling queda en el límite, como ya se había visto en la parte 1. Para las dos transformaciones, todas las pruebas arrojan p-valores muy por encima de $0.05$ (el menor es `0.8218`), por lo que no hay evidencia para rechazar normalidad. La aproximada ($\lambda = 0.5$) alcanza un p-valor de Shapiro-Wilk de `0.9941`, ligeramente superior al de la exacta (`0.9810`). Esto es posible porque el $\lambda$ exacto maximiza la verosimilitud del modelo lineal, no el p-valor de una prueba de normalidad.
+
+## D. Detección de anomalías
+
+La corrección de la base solo es necesaria si las transformaciones no alcanzan normalidad. Se verifica la condición y, solo en ese caso, se depuran ceros anómalos y atípicos y se vuelve a buscar $\lambda$:
+
+```{r}
+normales <- all(pv_bc[c("Box-Cox exacta", "Box-Cox aproximada"), ] > 0.05)
+
+if (normales) {
+  cat("Las dos transformaciones son normales en todas las pruebas: NO se requiere corregir la base.\n")
+}
+```
+
+Como las transformaciones ya son normales, no se modifica la base de datos y se conserva $\lambda$ tal como se encontró.
+
+# 3. Transformación de Yeo-Johnson
+
+Para la transformación de Yeo-Johnson se busca el $\lambda$ que maximiza el p-valor de la prueba de Shapiro-Wilk sobre la distancia transformada.
+
+$$f(y, \lambda) = \begin{cases}
+\dfrac{(y+1)^{\lambda} - 1}{\lambda} & y \ge 0,\ \lambda \neq 0 \\[2mm]
+\ln(y+1) & y \ge 0,\ \lambda = 0 \\[2mm]
+-\dfrac{(-y+1)^{2-\lambda} - 1}{2-\lambda} & y < 0,\ \lambda \neq 2 \\[2mm]
+-\ln(-y+1) & y < 0,\ \lambda = 2
+\end{cases}$$
+
+Buscamos en un espacio entre 0 y 1 la mejor opción de lambda.
+
+```{r}
+lp <- seq(0, 1, 0.001) 
+nlp <- length(lp)
+
+D <- matrix(as.numeric(NA), ncol=2, nrow=nlp)
+
+for (i in 1:nlp) {
+  # Transformación Yeo-Johnson iterativa
+  d <- yeo.johnson(dist, lambda = lp[i])
+  p <- ad.test(d)
+  D[i, ] <- c(lp[i], p$p.value)
+}
+
+N <- as.data.frame(D)
+colnames(N) <- c("Lambda", "Valor_p")
+
+
+# Extracción automática del mejor Lambda
+lambda_yj <- N$Lambda[which.max(N$Valor_p)]
+p_maximo <- max(N$Valor_p)
+
+cat("Lambda óptimo encontrado:", lambda_yj, "\n")
+cat("P-valor máximo (Anderson-Darling):", p_maximo, "\n")
+
+plot(N$Lambda, N$Valor_p, type="l", col="darkred", lwd=3,
+     main="Optimización de Lambda (Yeo-Johnson)",
+     xlab="Lambda", ylab="Valor p (Normalidad)")
+abline(v = lambda_yj, col="blue", lty=2)
+
+```
+
+El $\lambda$ que maximiza el p-valor es $\lambda_{YJ} = 0.438$ (p-valor de Anderson-Darling = `0.9790`. Como todas las distancias son positivas, la transformación encontrada es
+
+$$dist_{YJ} = \frac{(dist + 1)^{0.438} - 1}{0.438}$$
+
+```{r}
+dist_yj <- ((dist +1) ^ lambda_yj - 1)/lambda_yj
+```
+
+```{r}
+knitr::kable(round(rbind("dist (original)" = medidas(dist), "Yeo-Johnson" = medidas(dist_yj)), 3), caption = "Medidas descriptivas: Yeo-Johnson")
+
+pv_yj <- rbind("Yeo-Johnson" = p_normalidad(dist_yj))
+knitr::kable(round(pv_yj, 4), caption = "p-valores de normalidad: Yeo-Johnson")
+
+par(mfrow = c(1, 2))
+hist_norm(dist_yj, paste0("Yeo-Johnson (lambda = ", lambda_yj, ")"))
+qqnorm(dist_yj, main = "QQ-Plot: Yeo-Johnson"); qqline(dist_yj, col = "red")
+par(mfrow = c(1, 1))
+```
+
+La transformación de Yeo-Johnson también logra normalidad: media y mediana quedan casi iguales (`10.225` y `9.773`), el sesgo es casi nulo, con valor de `-0.006` y todas las pruebas tienen p-valores superiores a `0.814`. El histograma y el QQ-plot muestran el mismo comportamiento que las transformaciones de Box-Cox.
+
+# 4. Conclusión de transformadas
+
+```{r}
+lista_t <- list("dist (original)" = dist, "Box-Cox exacta" = dist_exact,
+                "Box-Cox aproximada" = dist_aprox, "Yeo-Johnson" = dist_yj)
+comparacion <- data.frame(
+  Transformación = names(lista_t),
+  Lambda = c(NA, round(lambda_exact, 3), lambda_aprox, lambda_yj),
+  Sesgo = sapply(lista_t, skewness),
+  Curtosis = sapply(lista_t, kurtosis),
+  p_Shapiro = sapply(lista_t, function(x) shapiro.test(x)$p.value),
+  p_AD = sapply(lista_t, function(x) ad.test(x)$p.value),
+  p_Lilliefors = sapply(lista_t, function(x) lillie.test(x)$p.value),
+  p_JB = sapply(lista_t, function(x) jarque.test(x)$p.value)
+)
+knitr::kable(comparacion, digits = 4, row.names = FALSE,
+             caption = "Comparación de las transformaciones")
+```
+
+Las tres transformaciones resuelven el problema de normalidad de la distancia original, por lo que la decisión se apoya también en la economía del modelo:
+
+- Box-Cox exacta ($\lambda = 0.424$): es la que maximiza la verosimilitud, pero requiere un exponente con tres decimales. Además, su sesgo (`-0.1562`) es el más alejado de cero entre las tres.
+
+- Yeo-Johnson ($\lambda = 0.438$): normalidad equivalente a la aproximada, pero está pensada para datos que pueden ser negativos o cero; aquí dist es estrictamente positiva, por lo que no aporta ventaja y obliga a trabajar con $(dist+1)$.
+
+- Box-Cox aproximada ($\lambda = 0.5$): obtiene el mayor p-valor de Shapiro-Wilk, tiene un sesgo prácticamente nulo y $\lambda = 0.5$ pertenece al intervalo de confianza del 95% según se nota en el gráfico generado. Equivale a una raíz cuadrada, lo cual es interpretativamente superior, y permite realizar despejes algebraicos directos con mayor facilidad que utilizar exponentes fraccionarios complejos (como 0.43), sin sacrificar el cumplimiento del supuesto de normalidad.
+
+Por normalidad y economía del modelo, la mejor transformación es la Box-Cox aproximada con $\lambda = 0.5$.
+
+# 5. Regresión Lineal Simple
+
+```{r}
+best_lambda <- lambda_aprox
+datos <- data.frame(speed = speed, dist = dist, T_dist = dist_aprox)
+n <- nrow(datos)
+```
+
+## A. Modelo lineal para la transformación
+
+```{r}
+modelo <- lm(T_dist ~ speed, data = datos)
+summary(modelo)
+b0 <- coef(modelo)[1]; b1 <- coef(modelo)[2]
+```
+
+El modelo ajustado es
+
+$$\widehat{T}(dist) = \sqrt{dist} = 1.2770 + 0.3224\, speed$$
+
+## B. Gráfica de los datos y el modelo (transformación vs. velocidad)
+
+```{r}
+plot(datos$speed, datos$T_dist, pch = 19, xlab = "Velocidad (mph)",
+     ylab = "Distancia transformada", main = "Modelo lineal: transformación vs. velocidad")
+abline(modelo, col="red", lwd=2)
+```
+
+Los puntos se distribuyen alrededor de la recta con una dispersión aproximadamente constante a lo largo de la velocidad, que es justo lo que se buscaba con la transformación.
+
+## C. Significancia del modelo
+
+```{r}
+sm <- summary(modelo)
+fs <- sm$fstatistic
+r <- cor(datos$speed, datos$T_dist)
+
+confint(modelo)
+cat("Prueba F conjunta: F(", fs[2], ",", fs[3], ") =", round(fs[1], 3),
+    ", p-valor =", format(pf(fs[1], fs[2], fs[3], lower.tail = FALSE), digits = 4), "\n")
+cat("Coeficiente de correlación r =", round(r, 4), "\n")
+cor.test(datos$speed, datos$T_dist)
+cat("R^2 =", round(sm$r.squared, 4), "| R^2 ajustado =", round(sm$adj.r.squared, 4), "\n")
+```
+
+- **Significancia individual:** la pendiente es altamente significativa ($10.825$, p-valor $< 0.001$) por lo que la velocidad explica la distancia transformada. El intercepto no es significativo (p-valor = $0.01$).
+- **Significancia conjunta:** la prueba F ($F = 117.18$, p-valor $< 0.001$) rechaza que el modelo no aporte nada. En regresión simple coincide con la prueba t de la pendiente, pues $F = t^2$.
+- **Correlación:** $r = 0.8423$ indica una relación lineal positiva fuerte entre la velocidad y la distancia transformada, y $R^2 = 0.7094$ es decir, el modelo explica alrededor del 70.9 % de la variabilidad.
+
+## D. Validez del modelo
+
+### D.1 Normalidad de los residuos
+
+```{r}
+res <- resid(modelo)
+rst <- rstudent(modelo)
+k <- length(coef(modelo))
+
+shapiro.test(res)
+ad.test(res)
+jarque.test(res)
+lillie.test(res)
+```
+
+Todas las pruebas arrojan p-valores superiores a $0.05$ (Shapiro-Wilk: `0.314`), por lo que se cumple la normalidad de los residuos.
+
+### D.2 Homocedasticidad
+
+```{r}
+plot(modelo, 1)
+plot(modelo, 3)
+```
+
+```{r}
+bptest(modelo)
+gqtest(modelo, order.by = ~ speed, data = datos)
+```
+
+Tanto Breusch-Pagan (p-valor = `0.916`) como Goldfeld-Quandt (p-valor = `0.666`) no rechazan la hipótesis de varianza constante, es decir, **se cumple la homocedasticidad**. Además, podemos observar en las gráficas de residuos que no siguen una forma de embudo o abanico, por lo que fortalece la premisa de homocedasticidad.
+
+### D.3 Independencia
+
+```{r}
+dwtest(modelo)
+bgtest(modelo, order = 1)
+```
+
+Las pruebas de Durbin-Watson (p-valor = `0.361`) y Breusch-Godfrey (p-valor = `0.901`) no detectan autocorrelación en los residuos (los datos están ordenados por velocidad), por lo que se cumple el supuesto de independencia.
+
+### D.4 Datos atípicos e influyentes
+
+```{r}
+plot(modelo, 4, main="Distancia de Cook")
+```
+
+La distancia de Cook identifica las observaciones 23 y 49 con mayor influencia relativa. Sin embargo, ninguna supera el umbral crítico general de $1$ (el máximo ronda $0.15$), por lo que no existen valores influyentes severos que comprometan los estimadores.
+
+## E. Modelo no lineal. Distancia en función de la velocidad
+
+Se despeja la distancia de $T = \sqrt{dist} = \beta_0 + \beta_1\, speed$:
+
+$$\widehat{dist} = (\beta_0 + \beta_1\, speed)^2$$
+
+```{r}
+# Extraer coeficientes exactos
+b0 <- coef(modelo)[1]
+b1 <- coef(modelo)[2]
+
+# Gráfica del modelo no lineal con los datos originales
+plot(cars$speed, cars$dist, main="Modelo No Lineal: Distancia vs Velocidad", 
+     xlab="Velocidad (speed)", ylab="Distancia Original (dist)", pch=16, col="darkred")
+
+# Proyectar la curva sobre el rango de velocidades
+speed_seq <- seq(min(cars$speed), max(cars$speed), length.out = 100)
+dist_pred <- (b0 + b1 * speed_seq)^2
+lines(speed_seq, dist_pred, col="blue", lwd=2)
+```
+
+El gráfico del modelo no lineal muestra la relación real entre la velocidad y la distancia de frenado original tras haber invertido algebraicamente la transformación Box-Cox. De esta visualización se pueden podemos observar que la curva captura muy bien la tendencia de los datos, demostrando que la relación entre ambas variables no es una línea recta. A medida que aumenta la velocidad, la distancia necesaria para detenerse crece de forma acelerada (curvatura cóncava hacia arriba).
+
+# Declaratoria de uso de IA durante el desarrollo de trabajo
+
+Se utilizó IA de la siguiente forma:
+
+- Herramienta: Gemini 3.1 Pro
+
+- Uso realizado: Mejora en visualización de resultados de la información calculada (tablas y gráficos).
+
+- Secciones donde se utilizó: Sección 2 en adelante en tablas y gráficas.
+
+- Validación realizada por los estudiantes: Al ser modificaciones de visualización, se confirmó que la información recabada no fuera distorcionada.
+
+- Se confirma que el contenido final entregado fue revisado, verificado y que se asume la responsabilidad del contenido final entregado.

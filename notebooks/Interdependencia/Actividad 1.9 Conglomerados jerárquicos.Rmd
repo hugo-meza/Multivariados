@@ -1,0 +1,245 @@
+---
+title: "Actividad 1.9"
+author: "Hugo Meza"
+date: "2026-11-24"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(factoextra)
+library(dplyr)
+library(tidyr)
+library(caret)
+source("../Dependencia/krulRutils.R")
+```
+
+# Actividad 1.9 Conglomerados jerárquicos
+
+## Problema 1
+
+```{r}
+M <- matrix(c(0, 1, 5, 8.5, 7.2,
+              1, 0, 4.5, 7.8, 6.7,
+              5, 4.5, 0, 3.6, 2.2,
+              8.5, 7.8, 3.6, 0, 2,
+              7.2, 6.7, 2.2, 2, 0), ncol = 5)
+M
+```
+
+### 1.1 Método average
+
+```{r}
+d <- as.dist(M)
+J <- hclust(d, method = "average")
+plot(J, hang = -1, lwd = 2, col = "blue", main = "Dendrograma de conglomerados Average", sub = "objetos", xlab = "n",ylab = c("distancia"))
+
+```
+
+```{r}
+fviz_nbclust(M, FUNcluster = hcut, method = "wss", k.max = 4)
+```
+
+### 1.2 Método Ward
+
+```{r}
+d <- as.dist(M)
+J <- hclust(d, method = "ward.D")
+plot(J, hang = -1, lwd = 2, col = "blue", main = "Dendrograma de conglomerados Ward", sub = "objetos", xlab = "n",ylab = c("distancia"))
+```
+
+### 1.3 Diferencias
+
+Se realizaron los dendogramas con los métodos de Ward y el de Average. Podemos ver que realmente los conglomerados mantienen a los mismos elementos durante ambos métodos, pero lo que varía es las distancias entre cada conglomerado. Por ejemplo, en el caso de Average, la distancia entre los dos clústers más grandes es de 7, mientras que en la de Ward es de aproximadamente 12.
+
+## Problema 2
+
+La base de datos *iris* en R almacena datos de las características de 3 especies de Lilis: Setosa, Versicolor y Virginica. Realiza un análisis Clouster para determinar qué tan bien están clasificadas las flores en su especie. Haz un análisis de la siguiente forma:
+
+### 2.1 Análisis descriptivo
+
+```{r}
+M <- iris
+head(M)
+```
+
+Haz un leve análisis descriptivo para cada variable por especie: media, desviación estándar, diagramas de caja y bigote
+
+```{r}
+medias <- aggregate(. ~ Species, data = M, FUN = mean)
+print("Medias por especie:")
+print(medias)
+
+desv_est <- aggregate(. ~ Species, data = M, FUN = sd)
+print("Desviación estándar por especie:")
+print(desv_est)
+
+```
+
+Podemos observar como las medias de las variables suelen tener diferencias en las distintas especies de flores, lo que nos puede dar un indicio de que pueden ser variables esenciales para poder realizar conglomerados o agrupamiento de datos. De esta destacan `Petal.Length` cuya media es de 1.46, 4.26 y de 5.55 de las flores setosa, versicolor y virginica; respectivamente. De igual forma, hay casos donde la desviación estándar difiere entre especies, pero hay casos donde se mantiene cercana entre ellas, como ocurre en `Sepal.Length`.
+
+```{r}
+iris %>%
+  pivot_longer(cols = -Species, names_to = "Variable", values_to = "Valor") %>%
+  ggplot(aes(x = Species, y = Valor, fill = Species)) +
+  geom_boxplot() +
+  facet_wrap(~ Variable, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "Distribución de variables en Iris por especie",
+       x = "Especie", y = "Centímetros (cm)") +
+  theme(legend.position = "none")
+```
+
+En este caso, podemos observar de forma gráfica las diferencias entre medias y medianas que se presentan en las distintas especies. La variación y concentración de los datos, presentados con el rango intercuartílico nos da una visualización amplia de cómo se definen los datos en las distintas variables.
+
+### 2.2 Clusters jerárquicos
+
+Como las cuatro variables están medidas en la misma unidad (centímetros) y en rangos comparables, se trabaja con los datos originales sin estandarizar. Se comparan dos combinaciones de distancia y método de aglomeración:
+
+- **Método A:** distancia euclidiana con aglomeración de Ward (`ward.D2`).
+- **Método B:** distancia Manhattan con aglomeración por promedio (`average`).
+
+```{r}
+X <- iris[, 1:4]
+especie <- iris$Species
+```
+
+**Número de grupos**
+
+Para elegir *k* se revisan, para cada método, las alturas de las últimas fusiones del dendrograma con ayuda del método WSS (Within-Cluster Sum of Squares o suma de cuadrados dentro de los clústeres).
+
+```{r}
+fviz_nbclust(X, FUNcluster = hcut, method = "wss", k.max = 6,
+             hc_method = "ward.D2", hc_metric = "euclidean") +
+  labs(title = "Silueta promedio: euclidiana + Ward")
+fviz_nbclust(X, FUNcluster = hcut, method = "wss", k.max = 6,
+             hc_method = "average", hc_metric = "manhattan") +
+  labs(title = "Silueta promedio: Manhattan + average")
+```
+
+En ambos métodos la WSS baja de 681.37 con un grupo a 154.95 con dos grupos y a alrededor de 79 con tres grupos (79.30 con Ward y 79.14 con average). A partir de *k* = 4 la reducción es mucho menor: con Ward baja a 58.82 y con average a 68.53. El codo se ubica en *k* = 3, lo que además coincide con el número de especies, por lo que se eligen 3 grupos.
+
+### Método A: distancia euclidiana y Ward
+
+**1. Dendrograma**
+
+```{r}
+J_A <- hclust(dist(X, method = "euclidean"), method = "ward.D2")
+plot(J_A, hang = -1, labels = FALSE, main = "Dendrograma: euclidiana + Ward",
+     xlab = "Observaciones", ylab = "Distancia", sub = "")
+rect.hclust(J_A, k = 3, border = c("tomato", "seagreen", "steelblue"))
+```
+
+**1.1 Distancias entre los grupos**
+
+```{r}
+round(tail(J_A$height, 6), 3)
+```
+
+Las tres últimas fusiones ocurren a alturas de 6.399, 12.300 y 32.448. El mayor salto ocurre en la última fusión (de 12.3 a 32.4), que une a setosa con el resto de las flores. El segundo salto importante (de 6.4 a 12.3) separa a los grupos de versicolor y virginica, lo que respalda el corte en *k* = 3.
+
+**1.2 Grupo de cada observación**
+
+```{r}
+grupo_A <- cutree(J_A, k = 3)
+Resultado_A <- cbind(iris, grupo = grupo_A)
+head(Resultado_A)
+table(grupo_A)
+```
+
+**1.3 Observaciones mal clasificadas**
+
+Cada grupo se asigna a la especie más frecuente dentro de él, y las observaciones que no pertenecen a esa especie se cuentan como mal clasificadas.
+
+```{r}
+t_A <- table(Especie = especie, Grupo = grupo_A)
+t_A
+mal_A <- sum(t_A) - sum(apply(t_A, 2, max))
+cat("Mal clasificadas:", mal_A, "de", sum(t_A), "(", round(100 * mal_A / sum(t_A), 2), "% )\n")
+```
+
+El grupo 1 corresponde a setosa, el 2 a versicolor y el 3 a virginica. Las 50 setosas se agrupan correctamente. De versicolor, 49 quedan en su grupo y 1 se asigna al de virginica, y de virginica, 35 quedan en su grupo y 15 se asignan al de versicolor. En total hay 16 observaciones mal clasificadas (10.67%), es decir, una precisión de 89.33%.
+
+**1.4 Medias por grupo**
+
+```{r}
+medias_A <- aggregate(X, by = list(grupo = grupo_A), FUN = mean)
+round(medias_A, 3)
+```
+
+Las medias del grupo 1 son idénticas a las de setosa (5.006, 3.428, 1.462 y 0.246), porque contiene exactamente a las 50 setosas. El grupo 2 tiene medias muy cercanas a las de versicolor, pero con pétalos un poco más grandes (largo de 4.420 contra 4.260), porque incluye 15 virginicas. El grupo 3 tiene pétalos y sépalos más grandes que el promedio de virginica (largo de sépalo de 6.869 contra 6.588), porque las virginicas más pequeñas se fueron al grupo 2 y quedan solo las más grandes.
+
+### Método B: distancia Manhattan y promedio
+
+**1. Dendrograma**
+
+```{r}
+J_B <- hclust(dist(X, method = "manhattan"), method = "average")
+plot(J_B, hang = -1, labels = FALSE, main = "Dendrograma: Manhattan + average",
+     xlab = "Observaciones", ylab = "Distancia", sub = "")
+rect.hclust(J_B, k = 3, border = c("tomato", "seagreen", "steelblue"))
+```
+
+**1.1 Distancias entre los grupos**
+
+```{r}
+round(tail(J_B$height, 6), 3)
+```
+
+Las tres últimas fusiones ocurren a alturas de 3.134, 3.422 y 6.769. El salto que separa a setosa del resto es muy claro (de 3.4 a 6.8), pero la diferencia entre la segunda y la tercera fusión es pequeña (de 3.1 a 3.4). Esto indica que, con este método, la separación entre versicolor y virginica es mucho menos marcada que con Ward.
+
+**1.2 Grupo de cada observación**
+
+```{r}
+grupo_B <- cutree(J_B, k = 3)
+Resultado_B <- cbind(iris, grupo = grupo_B)
+head(Resultado_B)
+table(grupo_B)
+```
+
+**1.3 Observaciones mal clasificadas**
+
+```{r}
+t_B <- table(Especie = especie, Grupo = grupo_B)
+t_B
+mal_B <- sum(t_B) - sum(apply(t_B, 2, max))
+cat("Mal clasificadas:", mal_B, "de", sum(t_B), "(", round(100 * mal_B / sum(t_B), 2), "% )\n")
+```
+
+Igual que en el método A, las 50 setosas forman su propio grupo. De versicolor, 49 quedan en su grupo y 1 se asigna al de virginica, y de virginica, 36 quedan en su grupo y 14 se asignan al de versicolor. En total hay 15 observaciones mal clasificadas (10.00%), es decir, una precisión de 90.00%.
+
+**1.4 Medias por grupo**
+
+```{r}
+medias_B <- aggregate(X, by = list(grupo = grupo_B), FUN = mean)
+round(medias_B, 3)
+```
+
+Las medias son prácticamente iguales a las del método A: el grupo 1 reproduce exactamente las medias de setosa, el grupo 2 se parece a versicolor con pétalos ligeramente más grandes (4.402 contra 4.260) y el grupo 3 corresponde a las virginicas más grandes (largo de sépalo de 6.849 contra 6.588).
+
+### Comparación de medias
+
+```{r}
+medias_esp <- aggregate(X, by = list(grupo = especie), FUN = mean)
+medias_esp$grupo <- as.character(medias_esp$grupo)
+medias_A$grupo <- as.character(medias_A$grupo)
+medias_B$grupo <- as.character(medias_B$grupo)
+comparacion <- rbind(cbind(Origen = "Especie", medias_esp),
+                     cbind(Origen = "Ward", medias_A),
+                     cbind(Origen = "Average", medias_B))
+comparacion[, 3:6] <- round(comparacion[, 3:6], 3)
+comparacion
+```
+
+### Interpretación y conclusión
+
+En ambos dendrogramas la primera división separa a setosa del resto de las flores a una distancia muy grande, lo que coincide con el análisis descriptivo: setosa tiene pétalos mucho más cortos y angostos que las otras dos especies. Versicolor y virginica se separan después, a una distancia mucho menor, porque sus medidas se traslapan, como se observó en los diagramas de caja.
+
+Los dos métodos producen agrupaciones casi idénticas. El método B (Manhattan y promedio) tiene una observación mal clasificada menos (15 contra 16), pero la diferencia es mínima. Se considera mejor el método A (euclidiana y Ward) porque su dendrograma justifica por sí solo el corte en tres grupos: el salto entre la segunda y la tercera fusión es grande (de 6.4 a 12.3), mientras que en el método B es casi imperceptible (de 3.1 a 3.4), y con ese dendrograma sería difícil elegir *k* = 3 sin conocer de antemano el número de especies. Además, Ward minimiza la varianza dentro de los grupos lo que tiende a producir grupos compactos.
+
+En conclusión, el análisis de conglomerados jerárquico recupera muy bien la especie setosa (100% de aciertos) y razonablemente bien versicolor y virginica, con alrededor de 90% de precisión global. Los errores se concentran en virginicas pequeñas que se confunden con versicolor, lo que indica que estas dos especies no están completamente separadas en las cuatro variables medidas.
+
+# Declaratoria de uso de IA durante el desarrollo de trabajo
+
+No se utilizó IA. Declaro que durante la elaboración de esta actividad de aprendizaje para evaluar no utilicé herramientas de Inteligencia Artificial generativa.

@@ -1,0 +1,59 @@
+# R and RStudio
+.Rhistory
+.RData
+.Rproj.user/
+
+# renv
+renv/
+renv/library/
+renv/staging/
+.venv/
+*.venv/
+
+# Quarto
+/.quarto/
+**/*.quarto_ipynb
+
+# Generated output
+output/
+
+# Data directories
+data/
+
+# Tabular data
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.xlsm
+*.ods
+
+# Statistical data formats
+*.rds
+*.rda
+*.rdata
+*.RData
+*.sav
+*.dta
+*.sas7bdat
+*.parquet
+*.feather
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Other structured data
+*.json
+*.jsonl
+*.xml
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Figures
+*.png

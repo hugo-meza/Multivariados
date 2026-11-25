@@ -1,0 +1,48 @@
+---
+title: "Actividad 1.4"
+author: "Hugo Meza"
+date: "2026-11-10"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+X <- matrix(c(3, 1, 0,
+              6, 4, 6, 
+              4, 2, 2, 
+              7, 0, 3, 
+              5, 3, 4), ncol = 3, byrow = TRUE)
+
+X_bar <- t(X) %*% rep(1, 5) * (1/5)
+X_bar
+```
+
+```{r}
+X_bar <- rep(1, 5) %*% t(X_bar)
+X_c <- X - X_bar
+X_c
+```
+
+```{r}
+
+S <- (1/4) * t(X_c) %*% X_c
+S
+det(S)
+```
+
+```{r}
+rango <- qr(X)$rank
+num_vectores <- ncol(X)
+
+# Verificación
+if (rango == num_vectores) {
+  cat("Son LINEALMENTE INDEPENDIENTES (Rango =", rango, ")\n")
+} else {
+  cat("Son LINEALMENTE DEPENDIENTES (Rango =", rango, "de", num_vectores, "vectores)\n")
+}
+```
